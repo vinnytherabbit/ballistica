@@ -1,6 +1,6 @@
 // Released under the MIT License. See LICENSE for details.
 
-#if BA_OSTYPE_LINUX
+#if BA_PLATFORM_LINUX
 #include "ballistica/core/platform/linux/core_platform_linux.h"
 
 #include <sys/utsname.h>
@@ -12,28 +12,11 @@
 #include <string>
 
 #include "ballistica/shared/ballistica.h"
+#include "ballistica/shared/foundation/exception.h"
 
 namespace ballistica::core {
 
 CorePlatformLinux::CorePlatformLinux() {}
-
-std::string CorePlatformLinux::GenerateUUID() {
-  std::string val;
-  char buffer[100];
-  FILE* fd_out = popen("cat /proc/sys/kernel/random/uuid", "r");
-  if (fd_out) {
-    int size = fread(buffer, 1, 99, fd_out);
-    fclose(fd_out);
-    if (size == 37) {
-      buffer[size - 1] = 0;  // chop off trailing newline
-      val = buffer;
-    }
-  }
-  if (val == "") {
-    throw Exception("kernel uuid not available");
-  }
-  return val;
-}
 
 auto CorePlatformLinux::DoGetDeviceDescription() -> std::string {
   // Let's look for something pretty like "Ubuntu 20.04", etc.
@@ -104,10 +87,10 @@ auto CorePlatformLinux::GetDeviceUUIDInputs() -> std::list<std::string> {
 
 bool CorePlatformLinux::DoHasTouchScreen() { return false; }
 
-std::string CorePlatformLinux::GetPlatformName() { return "linux"; }
+std::string CorePlatformLinux::GetLegacyPlatformName() { return "linux"; }
 
-std::string CorePlatformLinux::GetSubplatformName() {
-#if BA_TEST_BUILD
+std::string CorePlatformLinux::GetLegacySubplatformName() {
+#if BA_VARIANT_TEST_BUILD
   return "test";
 #else
   return "";
@@ -116,4 +99,4 @@ std::string CorePlatformLinux::GetSubplatformName() {
 
 }  // namespace ballistica::core
 
-#endif  // BA_OSTYPE_LINUX
+#endif  // BA_PLATFORM_LINUX

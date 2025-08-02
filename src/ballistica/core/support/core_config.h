@@ -10,8 +10,8 @@
 
 namespace ballistica::core {
 
-/// Collection of low level options for a run of the engine; passed
-/// when initing the core feature-set.
+/// A collection of low level options for a run of the engine; passed when
+/// initing the core feature-set.
 class CoreConfig {
  public:
   static auto ForArgsAndEnvVars(int argc, char** argv) -> CoreConfig;
@@ -60,6 +60,12 @@ class CoreConfig {
 
   /// Explicitly passed user-python (mods) dir.
   std::optional<std::string> user_python_dir{};
+
+  /// Explicitly passed cache dir.
+  std::optional<std::string> cache_dir{};
+
+  /// Disable writing of bytecode (.pyc) files.
+  bool dont_write_bytecode{};
 };
 
 }  // namespace ballistica::core

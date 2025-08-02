@@ -12,6 +12,7 @@
 #include "ballistica/base/logic/logic.h"
 #include "ballistica/base/platform/base_platform.h"
 #include "ballistica/base/support/context.h"
+#include "ballistica/core/core.h"
 #include "ballistica/core/platform/core_platform.h"
 #include "ballistica/shared/foundation/event_loop.h"
 #include "ballistica/shared/python/python_command.h"
@@ -108,7 +109,7 @@ void StdioConsole::StartInMainThread_() {
 
 void StdioConsole::Clear_() {
   int retval{-1};
-  if (g_buildconfig.ostype_macos() || g_buildconfig.ostype_linux()) {
+  if (g_buildconfig.platform_macos() || g_buildconfig.platform_linux()) {
     // Attempt to run actual clear command on unix-y systems to plop
     // our prompt back at the top of the screen.
     retval = core::CorePlatform::System("clear");

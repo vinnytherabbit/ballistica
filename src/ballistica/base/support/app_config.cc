@@ -140,14 +140,10 @@ class AppConfig::BoolEntry : public AppConfig::Entry {
   bool default_value_{};
 };
 
-AppConfig::AppConfig() { SetupEntries(); }
-
-// Clion think all calls of this are unreachable.
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "UnreachableCallsOfFunction"
+AppConfig::AppConfig() { SetupEntries_(); }
 
 template <typename T>
-void AppConfig::CompleteMap(const T& entry_map) {
+void AppConfig::CompleteMap_(const T& entry_map) {
   for (auto&& i : entry_map) {
     assert(entries_by_name_.find(i.second.name()) == entries_by_name_.end());
     assert(i.first < decltype(i.first)::kLast);
@@ -155,35 +151,34 @@ void AppConfig::CompleteMap(const T& entry_map) {
   }
 
   // Make sure all values have entries.
-#if BA_DEBUG_BUILD
-  int last = static_cast<int>(decltype(entry_map.begin()->first)::kLast);  // ew
-  for (int j = 0; j < last; ++j) {
-    auto i2 =
-        entry_map.find(static_cast<decltype(entry_map.begin()->first)>(j));
-    if (i2 == entry_map.end()) {
-      throw Exception("Missing appconfig entry " + std::to_string(j));
+  if (g_buildconfig.debug_build()) {
+    int last =
+        static_cast<int>(decltype(entry_map.begin()->first)::kLast);  // ew
+    for (int j = 0; j < last; ++j) {
+      auto i2 =
+          entry_map.find(static_cast<decltype(entry_map.begin()->first)>(j));
+      if (i2 == entry_map.end()) {
+        throw Exception("Missing appconfig entry " + std::to_string(j));
+      }
     }
   }
-#endif
 }
 
-#pragma clang diagnostic pop
-
-void AppConfig::SetupEntries() {
+void AppConfig::SetupEntries_() {
   // Register all our typed entries.
   float_entries_[FloatID::kScreenPixelScale] =
-      FloatEntry("Screen Pixel Scale", 1.0F);
+      FloatEntry("Screen Pixel Scale", 1.0f);
   float_entries_[FloatID::kTouchControlsScale] =
-      FloatEntry("Touch Controls Scale", 1.0F);
+      FloatEntry("Touch Controls Scale", 1.0f);
   float_entries_[FloatID::kTouchControlsScaleMovement] =
-      FloatEntry("Touch Controls Scale Movement", 1.0F);
+      FloatEntry("Touch Controls Scale Movement", 1.0f);
   float_entries_[FloatID::kTouchControlsScaleActions] =
-      FloatEntry("Touch Controls Scale Actions", 1.0F);
-  float_entries_[FloatID::kSoundVolume] = FloatEntry("Sound Volume", 1.0F);
-  float_entries_[FloatID::kMusicVolume] = FloatEntry("Music Volume", 1.0F);
+      FloatEntry("Touch Controls Scale Actions", 1.0f);
+  float_entries_[FloatID::kSoundVolume] = FloatEntry("Sound Volume", 1.0f);
+  float_entries_[FloatID::kMusicVolume] = FloatEntry("Music Volume", 1.0f);
 
   // Note: keep this synced with the defaults in MainActivity.java.
-  float gvrrts_default = g_core->platform->IsRunningOnDaydream() ? 1.0F : 0.5F;
+  float gvrrts_default = g_core->platform->IsRunningOnDaydream() ? 1.0f : 0.5f;
   float_entries_[FloatID::kGoogleVRRenderTargetScale] =
       FloatEntry("GVR Render Target Scale", gvrrts_default);
 
@@ -206,6 +201,8 @@ void AppConfig::SetupEntries() {
       StringEntry("VR Head Relative Audio", "Auto");
   string_entries_[StringID::kMacControllerSubsystem] =
       StringEntry("Mac Controller Subsystem", "Classic");
+  string_entries_[StringID::kDevConsoleActiveTab] =
+      StringEntry("Dev Console Tab", "Python");
 
   int_entries_[IntID::kPort] = IntEntry("Port", kDefaultPort);
   int_entries_[IntID::kMaxFPS] = IntEntry("Max FPS", 60);
@@ -243,12 +240,14 @@ void AppConfig::SetupEntries() {
       BoolEntry("Show Demos When Idle", false);
   bool_entries_[BoolID::kShowDeprecatedLoginTypes] =
       BoolEntry("Show Deprecated Login Types", false);
+  bool_entries_[BoolID::kHighlightPotentialTokenPurchases] =
+      BoolEntry("Highlight Potential Token Purchases", true);
 
   // Now add everything to our name map and make sure all is kosher.
-  CompleteMap(float_entries_);
-  CompleteMap(int_entries_);
-  CompleteMap(string_entries_);
-  CompleteMap(bool_entries_);
+  CompleteMap_(float_entries_);
+  CompleteMap_(int_entries_);
+  CompleteMap_(string_entries_);
+  CompleteMap_(bool_entries_);
 }
 
 auto AppConfig::Resolve(FloatID id) -> float {

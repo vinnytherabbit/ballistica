@@ -8,6 +8,9 @@
 #include "ballistica/base/graphics/component/empty_component.h"
 #include "ballistica/base/input/input.h"
 #include "ballistica/base/support/app_config.h"
+#include "ballistica/core/core.h"
+#include "ballistica/core/logging/logging.h"
+#include "ballistica/core/logging/logging_macros.h"
 #include "ballistica/ui_v1/python/ui_v1_python.h"
 #include "ballistica/ui_v1/widget/root_widget.h"
 #include "ballistica/ui_v1/widget/stack_widget.h"
@@ -32,7 +35,8 @@ void UIV1FeatureSet::OnModuleExec(PyObject* module) {
   // Various ballistica functionality will fail if this has not been done.
   g_core = core::CoreFeatureSet::Import();
 
-  g_core->Log(LogName::kBaLifecycle, LogLevel::kInfo, "_bauiv1 exec begin");
+  g_core->logging->Log(LogName::kBaLifecycle, LogLevel::kInfo,
+                       "_bauiv1 exec begin");
 
   // Create our feature-set's C++ front-end.
   assert(g_ui_v1 == nullptr);
@@ -52,7 +56,8 @@ void UIV1FeatureSet::OnModuleExec(PyObject* module) {
   assert(g_base == nullptr);  // Should be getting set once here.
   g_base = base::BaseFeatureSet::Import();
 
-  g_core->Log(LogName::kBaLifecycle, LogLevel::kInfo, "_bauiv1 exec end");
+  g_core->logging->Log(LogName::kBaLifecycle, LogLevel::kInfo,
+                       "_bauiv1 exec end");
 }
 
 auto UIV1FeatureSet::Import() -> UIV1FeatureSet* {
@@ -62,29 +67,25 @@ auto UIV1FeatureSet::Import() -> UIV1FeatureSet* {
   return ImportThroughPythonModule<UIV1FeatureSet>("_bauiv1");
 }
 
-void UIV1FeatureSet::DoHandleDeviceMenuPress(base::InputDevice* device) {
-  python->HandleDeviceMenuPress(device);
-}
-
 void UIV1FeatureSet::DoShowURL(const std::string& url) { python->ShowURL(url); }
 
-bool UIV1FeatureSet::MainMenuVisible() {
-  // We consider anything on our screen or overlay stacks to be a 'main menu'.
-  // Probably need a better name than 'main menu' though.
+bool UIV1FeatureSet::IsMainUIVisible() {
+  // We consider anything on our screen or overlay stacks to be a 'main ui'.
   auto* screen_root = screen_root_widget();
   auto* overlay_root = overlay_root_widget();
   return ((screen_root && screen_root->HasChildren())
           || (overlay_root && overlay_root->HasChildren()));
 }
 
-bool UIV1FeatureSet::PartyIconVisible() {
+bool UIV1FeatureSet::IsPartyIconVisible() {
   // Currently this is always visible.
   return true;
 }
 
-void UIV1FeatureSet::SetAccountState(bool signed_in, const std::string& name) {
+void UIV1FeatureSet::SetAccountSignInState(bool signed_in,
+                                           const std::string& name) {
   assert(root_widget_.exists());
-  root_widget_->SetAccountState(signed_in, name);
+  root_widget_->SetAccountSignInState(signed_in, name);
 }
 
 void UIV1FeatureSet::SetSquadSizeLabel(int num) {
@@ -98,7 +99,7 @@ void UIV1FeatureSet::ActivatePartyIcon() {
   }
 }
 
-bool UIV1FeatureSet::PartyWindowOpen() { return party_window_open_; }
+bool UIV1FeatureSet::IsPartyWindowOpen() { return party_window_open_; }
 
 void UIV1FeatureSet::Draw(base::FrameDef* frame_def) {
   base::RenderPass* overlay_flat_pass = frame_def->GetOverlayFlatPass();
@@ -179,10 +180,6 @@ void UIV1FeatureSet::OnActivate() {
   rw->Setup();
   rw->SetOverlayWidget(ow.get());
 
-  // Plug in all values we're storing.
-  // rw->SetSquadSizeLabel(party_icon_number_);
-  // rw->SetAccountState(account_signed_in_, account_name_);
-
   sw->GlobalSelect();
 }
 
@@ -223,7 +220,7 @@ void UIV1FeatureSet::OnScreenSizeChange() {
   }
 }
 
-void UIV1FeatureSet::OnScreenChange() {
+void UIV1FeatureSet::OnUIScaleChange() {
   // This gets called by the Python layer when UIScale or window size
   // changes.
   assert(g_base->InLogicThread());
@@ -267,7 +264,7 @@ void UIV1FeatureSet::DeleteWidget(Widget* widget) {
   }
 }
 
-void UIV1FeatureSet::DoApplyAppConfig() {
+void UIV1FeatureSet::ApplyAppConfig() {
   always_use_internal_on_screen_keyboard_ = g_base->app_config->Resolve(
       base::AppConfig::BoolID::kAlwaysUseInternalKeyboard);
 }
@@ -278,7 +275,6 @@ void UIV1FeatureSet::ConfirmQuit(QuitType quit_type) {
 }
 
 UIV1FeatureSet::UILock::UILock(bool write) {
-  assert(g_base->ui);
   assert(g_base->InLogicThread());
 
   if (write && g_ui_v1->ui_lock_count_ != 0) {

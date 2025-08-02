@@ -1,6 +1,7 @@
 // Released under the MIT License. See LICENSE for details.
 
-#if BA_OSTYPE_MACOS || BA_OSTYPE_IOS_TVOS
+#include "ballistica/shared/foundation/exception.h"
+#if BA_PLATFORM_MACOS || BA_PLATFORM_IOS_TVOS
 #include "ballistica/core/platform/apple/core_platform_apple.h"
 
 #if BA_XCODE_BUILD
@@ -33,9 +34,9 @@ namespace ballistica::core {
 CorePlatformApple::CorePlatformApple() = default;
 
 auto CorePlatformApple::GetDeviceV1AccountUUIDPrefix() -> std::string {
-  if (g_buildconfig.ostype_macos()) {
+  if (g_buildconfig.platform_macos()) {
     return "m";
-  } else if (g_buildconfig.ostype_ios_tvos()) {
+  } else if (g_buildconfig.platform_ios_tvos()) {
     return "i";
   } else {
     FatalError("Unhandled V1 UUID case.");
@@ -44,7 +45,7 @@ auto CorePlatformApple::GetDeviceV1AccountUUIDPrefix() -> std::string {
 }
 
 auto CorePlatformApple::DoGetDeviceName() -> std::string {
-#if BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && BA_XCODE_BUILD
 
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -69,14 +70,14 @@ auto CorePlatformApple::DoGetDeviceName() -> std::string {
 
   // Ask swift for a pretty name if possible.
   // return BallisticaKit::CocoaFromCpp::getDeviceName();
-#elif BA_OSTYPE_IOS_TVOS && BA_XCODE_BUILD
+#elif BA_PLATFORM_IOS_TVOS && BA_XCODE_BUILD
   return BallisticaKit::UIKitFromCpp::getDeviceName();
 #endif
   return CorePlatform::DoGetDeviceName();
 }
 
 auto CorePlatformApple::DoGetDeviceDescription() -> std::string {
-#if BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && BA_XCODE_BUILD
   return BallisticaKit::CocoaFromCpp::getDeviceModelName();
 #endif
   return CorePlatform::DoGetDeviceDescription();
@@ -91,11 +92,11 @@ auto CorePlatformApple::GetOSVersionString() -> std::string {
 
 // Legacy for device-accounts; don't modify this code.
 auto CorePlatformApple::GetRealLegacyDeviceUUID(std::string* uuid) -> bool {
-#if BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && BA_XCODE_BUILD
   *uuid = std::string(BallisticaKit::CocoaFromCpp::getLegacyDeviceUUID());
   return true;
 #endif
-#if BA_OSTYPE_IOS_TVOS
+#if BA_PLATFORM_IOS_TVOS
   *uuid = std::string(BallisticaKit::UIKitFromCpp::getLegacyDeviceUUID());
   // *uuid = base::AppleUtils::GetIOSUUID();
   return true;
@@ -103,7 +104,7 @@ auto CorePlatformApple::GetRealLegacyDeviceUUID(std::string* uuid) -> bool {
   return false;
 }
 
-#if BA_OSTYPE_MACOS && !BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && !BA_XCODE_BUILD
 // A fallback function to grab IOPlatformUUID
 // (for builds where we don't have access to swift/objc stuff).
 static auto GetMacUUIDFallback() -> std::string {
@@ -123,22 +124,22 @@ static auto GetMacUUIDFallback() -> std::string {
     throw Exception("Unable to access IOPlatformUUID");
   }
 }
-#endif  // BA_OSTYPE_MACOS && !BA_XCODE_BUILD
+#endif  // BA_PLATFORM_MACOS && !BA_XCODE_BUILD
 
 // For semi-permanent public-uuid hashes; can modify this if we
 // find better sources.
 auto CorePlatformApple::GetDeviceUUIDInputs() -> std::list<std::string> {
   std::list<std::string> out;
-#if BA_OSTYPE_MACOS
+#if BA_PLATFORM_MACOS
 #if BA_XCODE_BUILD
   out.push_back(
       std::string(BallisticaKit::CocoaFromCpp::getLegacyDeviceUUID()));
 #else   // BA_XCODE_BUILD
   out.push_back(GetMacUUIDFallback());
 #endif  // BA_XCODE_BUILD
-#endif  // BA_OSTYPE_MACOS
+#endif  // BA_PLATFORM_MACOS
 
-#if BA_OSTYPE_IOS_TVOS
+#if BA_PLATFORM_IOS_TVOS
   // out.push_back(base::AppleUtils::GetIOSUUID());
   out.push_back(
       std::string(BallisticaKit::UIKitFromCpp::getLegacyDeviceUUID()));
@@ -146,21 +147,13 @@ auto CorePlatformApple::GetDeviceUUIDInputs() -> std::list<std::string> {
   return out;
 }
 
-auto CorePlatformApple::GenerateUUID() -> std::string {
-  char buffer[100];
-  uuid_t uuid;
-  uuid_generate(uuid);
-  uuid_unparse(uuid, buffer);
-  return buffer;
-}
-
 auto CorePlatformApple::DoGetConfigDirectoryMonolithicDefault()
     -> std::optional<std::string> {
-#if BA_OSTYPE_IOS_TVOS
+#if BA_PLATFORM_IOS_TVOS
   // FIXME - this doesn't seem right.
   printf("FIXME: get proper default-config-dir\n");
   return std::string(getenv("HOME")) + "/Library";
-#elif BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#elif BA_PLATFORM_MACOS && BA_XCODE_BUILD
   return std::string(BallisticaKit::CocoaFromCpp::getApplicationSupportPath())
          + "/BallisticaKit";
 #else
@@ -168,8 +161,17 @@ auto CorePlatformApple::DoGetConfigDirectoryMonolithicDefault()
 #endif
 }
 
+auto CorePlatformApple::DoGetCacheDirectoryMonolithicDefault()
+    -> std::optional<std::string> {
+#if BA_XCODE_BUILD
+  return BallisticaKit::FromCpp::getCacheDirectoryPath();
+#else
+  return CorePlatform::DoGetCacheDirectoryMonolithicDefault();
+#endif
+}
+
 auto CorePlatformApple::DoHasTouchScreen() -> bool {
-#if BA_OSTYPE_IOS
+#if BA_PLATFORM_IOS
   return true;
 #else
   return false;
@@ -177,7 +179,7 @@ auto CorePlatformApple::DoHasTouchScreen() -> bool {
 }
 
 auto CorePlatformApple::GetDefaultUIScale() -> UIScale {
-#if BA_OSTYPE_IOS
+#if BA_PLATFORM_IOS
   if (BallisticaKit::UIKitFromCpp::isTablet()) {
     // if (base::AppleUtils::IsTablet()) {
     return UIScale::kMedium;
@@ -191,7 +193,7 @@ auto CorePlatformApple::GetDefaultUIScale() -> UIScale {
 }
 
 auto CorePlatformApple::IsRunningOnDesktop() -> bool {
-#if BA_OSTYPE_IOS_TVOS
+#if BA_PLATFORM_IOS_TVOS
   return false;
 #else
   return true;
@@ -378,7 +380,7 @@ auto CorePlatformApple::IsOSPlayingMusic() -> bool {
 }
 
 void CorePlatformApple::MacMusicAppInit() {
-#if BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && BA_XCODE_BUILD
   BallisticaKit::CocoaFromCpp::macMusicAppInit();
   // base::AppleUtils::MacMusicAppInit();
 #else
@@ -386,7 +388,7 @@ void CorePlatformApple::MacMusicAppInit() {
 #endif
 }
 auto CorePlatformApple::MacMusicAppGetVolume() -> int {
-#if BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && BA_XCODE_BUILD
   return BallisticaKit::CocoaFromCpp::macMusicAppGetVolume();
   // return static_cast<int>(base::AppleUtils::MacMusicAppGetVolume());
 #else
@@ -394,7 +396,7 @@ auto CorePlatformApple::MacMusicAppGetVolume() -> int {
 #endif
 }
 void CorePlatformApple::MacMusicAppSetVolume(int volume) {
-#if BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && BA_XCODE_BUILD
   return BallisticaKit::CocoaFromCpp::macMusicAppSetVolume(volume);
   // base::AppleUtils::MacMusicAppSetVolume(volume);
 #else
@@ -403,7 +405,7 @@ void CorePlatformApple::MacMusicAppSetVolume(int volume) {
 }
 
 void CorePlatformApple::MacMusicAppStop() {
-#if BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && BA_XCODE_BUILD
   return BallisticaKit::CocoaFromCpp::macMusicAppStop();
   // base::AppleUtils::MacMusicAppStop();
 #else
@@ -413,7 +415,7 @@ void CorePlatformApple::MacMusicAppStop() {
 
 auto CorePlatformApple::MacMusicAppPlayPlaylist(const std::string& playlist)
     -> bool {
-#if BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && BA_XCODE_BUILD
   return BallisticaKit::CocoaFromCpp::macMusicAppPlayPlaylist(playlist);
   // return base::AppleUtils::MacMusicAppPlayPlaylist(playlist.c_str());
 #else
@@ -422,7 +424,7 @@ auto CorePlatformApple::MacMusicAppPlayPlaylist(const std::string& playlist)
 }
 
 auto CorePlatformApple::MacMusicAppGetPlaylists() -> std::list<std::string> {
-#if BA_OSTYPE_MACOS && BA_XCODE_BUILD
+#if BA_PLATFORM_MACOS && BA_XCODE_BUILD
   BallisticaKit::CocoaFromCpp::macMusicAppGetPlaylists();
   // mac_music_app_playlists_.clear();
   // mac_music_app_playlists_.push_back("foof");
@@ -438,18 +440,18 @@ auto CorePlatformApple::MacMusicAppGetPlaylists() -> std::list<std::string> {
 #endif
 }
 
-auto CorePlatformApple::GetPlatformName() -> std::string {
-#if BA_OSTYPE_MACOS
+auto CorePlatformApple::GetLegacyPlatformName() -> std::string {
+#if BA_PLATFORM_MACOS
   return "mac";
-#elif BA_OSTYPE_IOS_TVOS
+#elif BA_PLATFORM_IOS_TVOS
   return "ios";
 #else
 #error FIXME
 #endif
 }
 
-auto CorePlatformApple::GetSubplatformName() -> std::string {
-#if BA_TEST_BUILD
+auto CorePlatformApple::GetLegacySubplatformName() -> std::string {
+#if BA_VARIANT_TEST_BUILD
   return "test";
 #elif BA_XCODE_BUILD
   return "appstore";
@@ -458,26 +460,37 @@ auto CorePlatformApple::GetSubplatformName() -> std::string {
 #endif
 }
 
-auto CorePlatformApple::GetLocale() -> std::string {
+auto CorePlatformApple::GetBaLocale() -> std::string {
 #if BA_XCODE_BUILD
-  if (!locale_.has_value()) {
-    locale_ = std::string(BallisticaKit::FromCpp::getLocaleString());
+  if (!ba_locale_.has_value()) {
+    ba_locale_ = std::string(BallisticaKit::FromCpp::getBaLocale());
   }
-  return *locale_;
+  return *ba_locale_;
 #else
-  return CorePlatform::GetLocale();
+  return CorePlatform::GetBaLocale();
+#endif
+}
+
+auto CorePlatformApple::GetLocaleTag() -> std::string {
+#if BA_XCODE_BUILD
+  if (!locale_tag_.has_value()) {
+    locale_tag_ = std::string(BallisticaKit::FromCpp::getLocaleTag());
+  }
+  return *locale_tag_;
+#else
+  return CorePlatform::GetLocaleTag();
 #endif
 }
 
 auto CorePlatformApple::CanShowBlockingFatalErrorDialog() -> bool {
-  if (g_buildconfig.xcode_build() && g_buildconfig.ostype_macos()) {
+  if (g_buildconfig.xcode_build() && g_buildconfig.platform_macos()) {
     return true;
   }
   return CorePlatform::CanShowBlockingFatalErrorDialog();
 }
 
 void CorePlatformApple::BlockingFatalErrorDialog(const std::string& message) {
-#if BA_XCODE_BUILD && BA_OSTYPE_MACOS
+#if BA_XCODE_BUILD && BA_PLATFORM_MACOS
   BallisticaKit::CocoaFromCpp::blockingFatalErrorDialog(message);
 #else
   CorePlatform::BlockingFatalErrorDialog(message);
@@ -486,4 +499,4 @@ void CorePlatformApple::BlockingFatalErrorDialog(const std::string& message) {
 
 }  // namespace ballistica::core
 
-#endif  // BA_OSTYPE_MACOS || BA_OSTYPE_IOS_TVOS
+#endif  // BA_PLATFORM_MACOS || BA_PLATFORM_IOS_TVOS

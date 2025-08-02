@@ -1,8 +1,271 @@
-### 1.7.37 (build 22123, api 9, 2024-12-03)
+### 1.7.46 (build 22467, api 9, 2025-07-30)
+
+### 1.7.45 (build 22465, api 9, 2025-07-29)
+- Ticket counts and purchases are now stored with your V2 account instead of V1.
+  This should make things like opening treasure chests faster and smoother since
+  only a single server is involved instead of two. It also paves the way for all
+  the fun new upcoming store stuff. However be aware that older builds of the
+  game will still use your old V1-server inventory, so if you go back to an
+  older version of the game you may see different ticket counts or unlocks and
+  any inventory changes you make there might not be visible in newer versions.
+  So try and stay on newer versions at this point to be safe.
+- The `baplus.get_v1_account_ticket_count()` method has been removed. This count
+  is now available as `ba*.app.classic.tickets`.
+- The `baplus.get_v1_account_product_purchased()` method has been removed.
+  Current classic purchases are now available as `ba*.app.classic.purchases`.
+- Working with the repo now requires the 'zstd' binary, and will complain if it
+  is not found during env checks. This should be pretty widely available through
+  `apt install zstd` or whatever. We'll be making pretty widespread use of Zstd
+  compression in coming years in both the game and tools, as it gives pretty big
+  improvements in both size and speed compared to classic gzip stuff. It is also
+  being added to Python 3.14 later this year.
+
+### 1.7.44 (build 22451, api 9, 2025-06-28)
+- Added a `-B` / `--dont-write-bytecode` flag to disable writing .pyc files, and
+  an associated `dont_write_bytecode` value for the server config file. In most
+  cases writing .pyc files is useful as it can speed up relaunches and keep
+  things running smoother, but if you are doing something like generating tons
+  of config dirs for your servers then having the cache directories under each
+  of them fill with .pyc files may be wasteful.
+- Renamed the `setup_pycache` arg in `baenv` to `setup_pycache_prefix` and
+  switched it to default to `False` instead of `True`. Monolithic builds (pretty
+  much everything that matters currently) now explicitly pass `True` for it. The
+  only real impact this has is that modular builds now use totally vanilla
+  Python caching behavior (`__pycache__` dirs) instead of nagging the user about
+  manually setting the 'PYTHONPYCACHEPREFIX' env var to specific values.
+- The new pycache dir is now simply `(CACHE_DIR)/pyc` instead of
+  `(CACHE_DIR)/pyc/(BUILD_NUMBER)`. Having a single directory slightly
+  complicates the logic of pruning outdated caches, but I think I prefer that
+  over having to regerate a completely new cache each time a minor update comes
+  through.
+- Pycache upkeep now waits until a few seconds after the app is started up and
+  limits its speed a bit to avoid slowing down app startup and minimize the
+  possibility of hitches.
+- Holding shift while pressing a dev-console toggle key (~ or F2) now cycles it
+  in reverse.
+- The dev-console now remembers which tab was selected between runs.
+- The dev-console logging tab now remembers which logger you were last viewing
+  between app runs. This means if you have one particular logger you flip off
+  and on a lot you can generally get at it by just bringing up the small size
+  dev-console.
+- Cleaned up input handling. Now, if there is a single player using the local
+  device, all escape/menu/back buttons will bring up the menu associated with
+  that player, allowing leaving the game with just that player instead of fully
+  exiting to the menu/etc. This worked in limited situations before the big
+  1.7.37 UI revamp, but now is more generalized and consistent.
+- Added various debug logging for input devices (set `ba.input` to 'Debug' in
+  the dev-console logging tab to see it).
+- Software cursor no longer freezes during fades or other input-locked
+  situations and now draws over the top of fades instead of being affected by
+  them (makes it more consistent with hardware cursors).
+- Software cursor in sdl builds now disappears when the cursor leaves the window
+  instead of getting stuck at the edge.
+- Replaced all uses of Python's built in `urllib.request` with our bundled
+  `urllib3`. This should perform better and hopefully won't get stuck at
+  shutdown like old urllib was prone to do. Please holler if you run into any
+  sort of connectivity issues that weren't there before.
+- Turned the `babase.garbage_collect()` function into a full subsystem
+  (`ba*.app.gc`). It will now warn if too many objects are resorting to cyclic
+  garbage collection due to reference loops, and it offers some tips and
+  functionality to help track down and eliminate said loops. Check out the
+  `GarbageCollectionSubsystem` documentation for more info.
+- Added `DiscordSubsystem` class which wraps the underlying `_babase` 
+  implementation of discord sdk
+- Added proper support for mouse-cancel events. This fixes an annoying issue
+  where using home-bar nav gestures on Android to switch apps could lead to
+  unintended button presses (namely on chest slots since that is near the home
+  bar).
+- Fixed issues on some versions of Android with ads being cut off by system bars
+  at screen edges.
+- (build 22431) Using Android back gestures to bring up the in-game menu now
+  properly shows leave-game options for a single local player (similar fix as
+  mentioned above).
+- Tweaked the default on-screen controls positions slightly for modern phones.
+- The audio-server now inits itself asynchronously, which in my tests can shave
+  5-10% off of startup times. Please holler if you experience any odd audio
+  behavior in this build.
+- Officially deprecated the `# ba_meta export plugin` shortcut - you should
+  switch to `# ba_meta export babase.Plugin` if you have not yet. The former
+  will still work for now but will emit a warning.
+- Interstitial ads now show when playing tournaments. Sorry folks. But now that
+  tourneys are free, it doesn't make sense to give them a benefit over other
+  single-player play which *does* show ads. Remember you can permanently remove
+  ads for your account by buying the cheapest token pack. Either way, thanks for
+  helping me buy coffee.
+- Android version now pauses GL rendering while ads are showing (since it is not
+  visible anyway). Should save a bit of battery and help interactive ads play
+  smoother.
+- Cleared out several reference cycles using the new ref-loop detection
+  garbage-collection stuff. Learned an important lesson: don't create dataclass
+  classes within functions, as they seem to always wind up with reference cycles
+  and you'll leak memory each time you call that function (until manual gc is
+  finally run). I found that tutorial.py was creating 214 reference-cycled
+  objects per run due to a bunch of dataclasses defined in a function. Moving
+  them to the global scope dropped that to 0. Another cycle culprit was Flag
+  classes in a few minigames. I fixed those using weakrefs to break the cycles.
+- Didn't realize we've technically been requiring OpenGL 3.2 on desktop; not
+  3.0. Updated checks accordingly so any 3.0/3.1 people will get better error
+  messages.
+- The 'Logging' dev-console-tab has been polished up a bit, and now includes
+  descriptions for ballistica's various loggers.
+- Added `efro.util.strip_exception_tracebacks()` which can help break reference
+  cycles caused by handling exceptions.
+
+### 1.7.43 (build 22406, api 9, 2025-06-09)
+- Fixes an issue with tournament scores not submitting properly in 1.7.42.
+
+### 1.7.42 (build 22402, api 9, 2025-06-08)
+- Basic Discord social sdk support is now in place, but not yet enabled in by
+  default in builds (Thanks Loup-Garou911XD!).
+- Added `discord_start`, `discord_richpresence`, `discord_set_party`,
+  `discord_add_button`, `discord_join_lobby`, `discord_leave_lobby`,
+  `discord_send_lobby_message` funtions to _babase.
+- Added the `float_times` arg to `dataclassio.IOAttrs` to allow storing
+  `datetime.datetime` or `datetime.timedelta` values as simple floats instead of
+  int arrays.
+- Windows builds are now 64 bit. The last time I made this switch I heard from
+  some folks who still needed 32 bit so I switched it back, but this time there
+  are technical reasons: we're adopting the discord social sdk which is 64 bit
+  only. Also, Windows 10 will be officially end-of-life this coming October and
+  Windows 11 is 64 bit only. If you still need 32 bit builds please holler;
+  maybe we can maintain a stripped-down test build or something.
+- Mac prefab builds for Intel Macs are now enabled again. I had disabled these
+  thinking they were likely unused but was happy to find out I was wrong about
+  that.
+- Added 'Race' and 'Pro Race' to the Practice co-op section.
+- Removed the `ba*.app.env.test`, `ba*.app.env.arcade`, and `ba*.app.env.demo`
+  values, which were redundant now that `ba*.app.env.variant` exists.
+- Removed the `ba*.app.env.android` value which was redundant now that we have
+  `ba*.app.env.platform`.
+- The `ba*.app.env.debug` value is now `ba*.app.env.debug_build` to make it more
+  clear that this refers to how the app was built; not to a setting that can be
+  flipped on or off at runtime (like Python's `__debug__` value).
+- Added `ba*.app.env.cache_directory` which is where the app can put downloaded
+  assets and other data that it wants to keep but which it can recreate if
+  needed. It should always be safe to blow any or all of this data away between
+  runs (as the OS itself might do so in some cases).
+- You can now pass `--cache-dir` or `-a` on the command line to override the
+  app's cache directory. Its default varies per platform but the standard one is
+  `(CONFIG-DIR)/cache`.
+- The `volatile_data_directory` concept which was used internally has been
+  replaced by the new cache directory, so if you see a `vdata` dir in your app
+  config dir you can delete it to keep things tidy.
+- Backup configs are now named `.config_prev.json` instead of
+  `config.json.prev`. This keeps them hidden by default on unix-y OSs for a
+  tidier look, and also keeps .json file associations working. Feel free to blow
+  away any `config.json.prev` files you have lying around.
+- Debug builds will now blow away the occasional random file from the cache-dir
+  just before spinning up the engine. This is meant to exercise the app's
+  ability to recreate anything the OS itself might purge between runs (we make
+  the guarantee that cache-dir files remain intact while the app is running but
+  no such guarantees between runs).
+- The engine is now set up to generate its own Python bytecode (.pyc) files in
+  the cache-dir using the PYTHONPYCACHEPREFIX functionality introduced in Python
+  3.8. It will run a background thread to prune or regenerate .pyc files as
+  needed so the full cache should always be up to date (outside of the first few
+  moments when launching a new app version). Previously the app shipped with
+  .pyc files scattered in `__pycache__` dirs throughout the codebase which were
+  set to always be used when present, which lead to confusing behavior where
+  edits to bundled .py files would be ignored unless the associated .pyc file
+  was deleted first. Now things should be much more intuitive: there are only
+  .py files in ba_data and edits to them will work as expected; all .pyc
+  wrangling is handled automagically in the background. This makes me especially
+  happy as it allows me to simplify asset pipelines. Please holler if you run
+  into any side-effects of this system such as hitches or slowness on launch
+  compared to previous versions.
+- Cleaned up threading and shutdown behavior. The app now properly shuts down
+  Python on exit which means it will block and wait for all Python threads to
+  finish (though it will still force the issue and quit immediately if stuck for
+  a while). Also purged all uses of 'daemon=True' in threads which is generally
+  considered unsafe due to such threads possibly accessing Python state after
+  Python has shut down. So this new setup is safer and more deterministic but we
+  need to be careful about making sure all threads properly exit at app
+  shutdown. If you run into cases where the app consistently gets stuck when
+  trying to exit or you see warnings about unexpected threads still running,
+  please holler.
+  
+### 1.7.41 (build 22382, api 9, 2025-05-25)
+- Fixed a few unsafe accesses of cJSON objects that could be exploited to crash
+  servers by feeding them bad json data. If you ever come across CXX code
+  accessing a cJSON obj like `obj->valuestring` without making sure
+  `cJSON_IsString(obj)` is true first, please holler loudly at me.
+
+### 1.7.40 (build 22379, api 9, 2025-05-23)
+- Upgraded from Python 3.12 to 3.13. See python.org for what fun new goodies
+  this gets us.
+- Bumping minimum supported Android from 6.0 to 7.0. I'm reworking app language
+  support in this version (see notes below) and setting min-version to 7.0 makes
+  this significantly simpler due to Android 7 adding support for BCP 47
+  resources. It's been a year and a half since the bump to 6.0 and my stats show
+  barely anyone still running 6 so I feel this is reasonable.
+- Apple builds (namely Mac for now) are now using a more 'vanilla' version of
+  the Python library instead of the custom-built version I've been maintaining
+  for years. For one, this means that Python and its various modules and library
+  dependencies now exist as separate shared libraries on disk instead of all
+  being statically compiled into a single binary. This increases app size and
+  complexity a bit but will make it much easier to update Python going forward
+  and reduces the chances of things breaking due to nonstandard customizations.
+  At some point in the future I may make the same change for the Android
+  version, though the custom statically linked build is a bit easier to maintain
+  there so its less of a priority.
+- Fixed an issue on Android where in some cases viewing an ad to reduce chest
+  open time would have no effect. Please holler if you ever watch an ad and
+  don't see the resulting time reduction.
+- Querying exported classes via the meta subsystem now accepts fully qualified
+  path strings such as 'babase.Plugin' instead of type objects. This is because
+  I have disabled the class-name prettifying that was happening before
+  (`set_canonical_module_names()`), so the *actual* class paths we'd pull from
+  passed type objects now could be something ugly/internal like
+  `babase._plugin.Plugin` and I'd rather not use private paths in our `# ba_meta
+  export` comments. By explicitly providing string paths we can keep using clean
+  public aliased paths like `babase.Plugin`.
+- Sphinx documentation generation is now set to 'nitpicky' so it will complain
+  if anything is referenced in comments that cannot be found (classes, methods,
+  etc.) This should help avoid broken or out of date docstrings. Specific
+  exceptions to this can be added in `conf.py` if needed.
+- Added the `babase.LocaleSubsystem` which can be found at `ba*.app.locale`.
+  This is the modern replacement for the `LanguageSubsystem` at `ba*.app.lang`
+  which will eventually be removed. This ties in with upcoming goodies such as
+  asset-package based translations.
+- Split the Spanish translation into two different ones: 'Spanish - Latin
+  America' and 'Spanish - Spain'.
+- Split the Portuguese translation into two different ones: 'Portuguese -
+  Brazil' and 'Portuguese - Portugal'.
+- Android should now be smarter about selecting translations - for example, if
+  your first choice language is not available but your second choice is, it
+  should now show your second choice instead of falling back to English.
+
+### 1.7.39 (build 22353, api 9, 2025-04-08)
+- Lots of work on sphinx documentation. Docs are now generated for both runtime
+  and tools packages. Removed the old pdoc docs generation option since sphinx
+  is working quite well and gives us lots of room to grow, and also since we
+  can't really support both (docstrings need to be formatted to play nice with
+  one or the other). Big thanks to Dliwk though for the old pdoc setup which got
+  us to this point.
+- The `babase.App.State` class is now `babase.AppState`.
+- Removed `babase.print_exception()`. This has been mostly unused for a long
+  time. Anything still using it should use `logging.exception()` instead.
+- Removed `babase.print_error()`. This has also largely been unused for a long
+  time. Anything still using it should use `logging.error()` instead.
+- (build 22346) Hardened against some potential malformed-packet attacks. If you
+  find someone is still able to crash your server by sending invalid data,
+  please let me know.
+- Added highlights to show players when they have unclaimed chests in their
+  inbox or chests that can be opened.
+  
+### 1.7.38 (build 22318, api 9, 2025-03-20)
+- Added animations for reducing chest wait times or gaining tickets or tokens
+- Made MainWindow auto-recreate smarter. If something such as text input or a
+  popup window is suppressing main-window-auto-recreate, it'll now do a single
+  recreate once the suppression ends.
+- (build 22313) Fixed a possible client crash due to uninitialized memory when
+  handling `BA_MESSAGE_HOST_INFO` data.
+  
+### 1.7.37 (build 22304, api 9, 2025-03-10)
 - Bumping api version to 9. As you'll see below, there's some UI changes that
   will require a bit of work for any UI mods to adapt to. If your mods don't
   touch UI stuff at all you can simply bump your api version and call it a day.
-  I'm hopeful that api version won't need to be bumped again for along time (if
+  I'm hopeful that api version won't need to be bumped again for a long time (if
   ever).
 - I am pleased to announce that after years of hard work from many members of
   the community, PirateSpeak is now complete and available as a language choice.
@@ -78,7 +341,7 @@
   back-button handling are more automatic and windows don't have to hard-code
   where their back button goes to. There are also other benefits such as better
   state saving/restoring. When writing a MainWindow, pretty much all navigation
-  should only need too use methods: `main_window_has_control()`,
+  should only need to use methods: `main_window_has_control()`,
   `main_window_back()`, and `main_window_replace()`.
 - Finally got things updated so language testing works again, and made it a bit
   spiffier while at it. You now simply point the game at your test language and
@@ -171,6 +434,67 @@
   See 'Getter/Setter Function Names' in
   https://github.com/efroemling/ballistica/wiki/Coding-Style-Guide for more
   info.
+- Removed support for tab key navigation. This has been largely ignored for
+  years and behaved in a mostly broken way in all recent UIs. Keyboard users
+  should use arrow keys for navigation. To update any old UI code, search for
+  and remove any 'claims_tab' arguments to UI calls since that argument no
+  longer exists.
+- Added a `get_unknown_type_fallback()` method to `dataclassio.IOMultiType`.
+  This be defined to allow multi-type data to be loadable even in the presence
+  of new types it doesn't recognize.
+- Added a `lossy` arg to `dataclassio.dataclass_from_dict()` and
+  `dataclassio.dataclass_from_json()`. Enum value fallbacks and the new
+  multitype fallbacks are now only applied when `lossy` is True. This also flags
+  the returned dataclass to prevent it from being serialized back out. Fallbacks
+  are useful for forward compatibility, but they are also dangerous in that they
+  can silently modify/destroy data, so this mechanism will hopefully help keep
+  them used safely.
+- Added a spinner widget (creatable via `bauiv1.spinnerwidget()`). This should
+  help things look more alive than the static 'loading...' text I've been using
+  in various places.
+- Tournament now award chests instead of tickets.
+- Tournaments are now free to enter if you are running this build or newer.
+- (build 22225) Added `babase.get_virtual_screen_size()` and to get the current
+  virtual screen size, `babase.get_virtual_safe_area_size()` to get the size of
+  the area where things are guaranteed to be visible no matter how the window is
+  resized, and added a `refresh_on_screen_size_changes` arg to the `MainWindow`
+  class to automatically recreate the window when the screen is resized. This
+  combined functionality can be used to custom fit UI elements to the exact
+  screen size, which is especially useful at the small ui-scale with its limited
+  screen real-estate. Generally medium and large ui-scale windows don't fill the
+  entire screen and can simply stay within the virtual safe area and thus don't
+  need to refresh.
+- (build 22237) Reverted the change from earlier in this release where small
+  ui-scale would have its own distinct widescreen virtual-safe-area. The virtual
+  safe area is now always 1280x720 (16:9). I came to realize there were
+  significant downsides to having safe-area be inconsistent; for instance
+  onscreen elements designed for one safe area might be out of frame for players
+  using the other, and things would effectively need to be limited to the
+  intersection of the two safe areas to work everywhere. Since it is now
+  possible to take advantage of the full screen area using the
+  `get_virtual_screen_size()` and whatnot mentioned above, it makes sense to
+  return to a single consistent safe area.
+- (build 22258) Updated the Windows redist installers to the latest versions. If
+  anyone is getting release builds of the game silently failing to launch,
+  install the bundled redist libs and try again.
+- (build 22258) Removed Windows debug redist libs such as `ucrtbased.dll` and
+  `vcruntime140d.dll`. Technically these are not supposed to be bundled with
+  software anyway and should instead be installed by installing Visual Studio. I
+  was shipping outdated versions which was causing extra problems, so I've
+  decided that I should follow the rules here and remove them. This means that
+  if you want to run debug builds on Windows you'll need to install Visual
+  Studio. Most people should be fine with release builds and don't need to worry
+  about this.
+- Added `docker-compose.yml` which can now be used with `docker compose` command
+- Changed Docker make targets to use `docker compose` instead of `docker build`
+- (build 22285) Window auto-recreation due to screen resizing is now disabled
+  while onscreen-keyboards are present. This works around an issue where text
+  editing on Android could break due to on-screen-keyboards causing screen
+  resizes which kill the text-widgets they target.
+- (build 22300) There is now a 'Secure V1 Connections' option in account
+  settings on ballistica.net which should prevent V1 account spoofing attacks
+  when enabled. The downside is that clients older than build 22300 will no
+  longer be able to access the account while that setting is enabled.
 
 ### 1.7.36 (build 21944, api 8, 2024-07-26)
 - Wired up Tokens, BombSquad's new purchasable currency. The first thing these

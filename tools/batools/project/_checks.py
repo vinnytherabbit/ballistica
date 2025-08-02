@@ -16,7 +16,7 @@ from efrotools.project import (
     get_non_public_legal_notice,
     get_non_public_legal_notice_prev,
 )
-from efrotools.pyver import PYVER, PYVERNODOT
+from efrotools.pyver import PYVER
 
 if TYPE_CHECKING:
     from batools.project._updater import ProjectUpdater
@@ -52,6 +52,7 @@ def _source_file_feature_set_namespace_check(
     self: ProjectUpdater, fname: str, lines: list[str]
 ) -> None:
     """Make sure C++ code uses correct namespaces based on its location."""
+    # pylint: disable=too-many-branches
 
     # Extensions we know we're skipping.
     if any(fname.endswith(x) for x in ['.c', '.swift']):
@@ -104,12 +105,20 @@ def _source_file_feature_set_namespace_check(
         if line.startswith('namespace '):
             namespace, predecs_only = _get_namespace_info(lines, i)
             if namespace != f'ballistica::{toplevelname}' and not predecs_only:
-                raise CleanError(
-                    f'Invalid line "{line}" at {fname} line {i+1}.\n'
-                    f"This file is associated with the '{toplevelname}'"
-                    ' FeatureSet so should be using the'
-                    f" 'ballistica::{toplevelname}' namespace."
-                )
+
+                # Special case - allow our 'from_swift' namespace.
+                if line == 'namespace from_swift {' and (
+                    fname.endswith('/from_swift.h')
+                    or fname.endswith('/from_swift.cc')
+                ):
+                    pass
+                else:
+                    raise CleanError(
+                        f'Invalid line "{line}" at {fname} line {i+1}.\n'
+                        f"This file is associated with the '{toplevelname}'"
+                        ' FeatureSet so should be using the'
+                        f" 'ballistica::{toplevelname}' namespace."
+                    )
 
 
 def _get_namespace_info(lines: list[str], index: int) -> tuple[str, bool]:
@@ -386,6 +395,8 @@ def _check_python_file_imports(
         else:
             continue
 
+        single_import: str | None
+
         # Look for simple cases of 'from foo import bar'.
         if (
             importparts
@@ -540,7 +551,10 @@ def _check_python_file_shebang(
         # of Python (with a few exceptions where it needs to differ)
         if fname not in ['tools/vmshell']:
             expected = f'#!/usr/bin/env python{PYVER}'
-            if not contents.startswith(expected):
+            expected2 = f'#!/usr/bin/env -S python{PYVER} -B'
+            if not contents.startswith(expected) and not contents.startswith(
+                expected2
+            ):
                 raise CleanError(
                     f'Incorrect shebang (first line) for {fname}.\n'
                     f'Expected:\n{expected}\n\n'
@@ -624,16 +638,6 @@ def check_misc(self: ProjectUpdater) -> None:
         _ = replace_exact(contents, f'libpython{PYVER}d.a', 'DUMMYVAL')
         _ = replace_exact(contents, f'libpython{PYVER}.a', 'DUMMYVAL')
 
-    # Make sure assets Makefile is compiling pyc files for current
-    # Python version.
-    contents = readfile(os.path.join(self.projroot, 'src/assets/Makefile'))
-    _ = replace_exact(
-        contents,
-        f'$1: $$(subst /__pycache__,,$$(subst .cpython-{PYVERNODOT}'
-        f'.opt-1.pyc,.py,$1))',
-        'DUMMYVAL',
-    )
-
     # Make sure staged wrapper script is invoking current Python version
     # on modular builds.
     contents = readfile(os.path.join(self.projroot, 'tools/batools/staging.py'))
@@ -643,8 +647,12 @@ def check_misc(self: ProjectUpdater) -> None:
         'DUMMYVAL',
     )
 
-    # Our XCode project should refer to the current Python lib serveral times.
-    if not self.public:
+    # Our XCode project should refer to the current Python lib several
+    # times.
+    #
+    # UPDATE: We are now using xcframework; would need to update this
+    # but just disabling for now.
+    if not self.public and bool(False):
         contents = readfile(
             os.path.join(
                 self.projroot,

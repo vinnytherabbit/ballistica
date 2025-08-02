@@ -17,6 +17,7 @@
 #include "ballistica/base/python/methods/python_methods_base_1.h"
 #include "ballistica/base/python/methods/python_methods_base_2.h"
 #include "ballistica/base/python/methods/python_methods_base_3.h"
+#include "ballistica/core/core.h"
 #include "ballistica/shared/python/python_command.h"  // IWYU pragma: keep.
 #include "ballistica/shared/python/python_module_builder.h"
 
@@ -68,6 +69,42 @@ void BasePython::ImportPythonObjs() {
   // Import and grab all the Python stuff we use from C++.
   // Note: Binding .inc files expect 'ObjID' and 'objs_' to be defined.
 #include "ballistica/base/mgen/pyembed/binding_base.inc"
+
+  // Grab and store our enum values for things like AppPlatform, AppVariant,
+  // etc. from the enum types we just grabbed.
+
+  // AppPlatform
+  {
+    const char* val = g_buildconfig.variant();
+    auto args = PythonRef::Stolen(Py_BuildValue("(s)", val));
+    auto result = objs_.Get(ObjID::kAppVariantType).Call(args);
+    if (!result.exists()) {
+      FatalError("Invalid AppVariant value: " + std::string(val));
+    }
+    objs_.Store(ObjID::kAppVariant, *result);
+  }
+
+  // AppArchitecture
+  {
+    const char* val = g_buildconfig.arch();
+    auto args = PythonRef::Stolen(Py_BuildValue("(s)", val));
+    auto result = objs_.Get(ObjID::kAppArchitectureType).Call(args);
+    if (!result.exists()) {
+      FatalError("Invalid AppArchitecture value: " + std::string(val));
+    }
+    objs_.Store(ObjID::kAppArchitecture, *result);
+  }
+
+  // AppPlatform
+  {
+    const char* val = g_buildconfig.platform();
+    auto args = PythonRef::Stolen(Py_BuildValue("(s)", val));
+    auto result = objs_.Get(ObjID::kAppPlatformType).Call(args);
+    if (!result.exists()) {
+      FatalError("Invalid AppPlatform value: " + std::string(val));
+    }
+    objs_.Store(ObjID::kAppPlatform, *result);
+  }
 }
 
 void BasePython::ImportPythonAppObjs() {
@@ -120,9 +157,7 @@ void BasePython::Reset() {
 void BasePython::OnMainThreadStartApp() {
   auto gil{Python::ScopedInterpreterLock()};
   // Set up some env stuff (interrupt handlers, etc.)
-  auto result = g_base->python->objs()
-                    .Get(BasePython::ObjID::kOnMainThreadStartAppCall)
-                    .Call();
+  auto result = objs().Get(ObjID::kOnMainThreadStartAppCall).Call();
   if (!result.exists()) {
     FatalError("babase._env.on_main_thread_start_app() failed.");
   }
@@ -130,32 +165,58 @@ void BasePython::OnMainThreadStartApp() {
 
 void BasePython::OnAppStart() {
   assert(g_base->InLogicThread());
-  objs().Get(BasePython::ObjID::kAppOnNativeStartCall).Call();
+  objs().Get(ObjID::kAppOnNativeStartCall).Call();
 }
 
 void BasePython::OnAppSuspend() {
   assert(g_base->InLogicThread());
-  objs().Get(BasePython::ObjID::kAppOnNativeSuspendCall).Call();
+  objs().Get(ObjID::kAppOnNativeSuspendCall).Call();
 }
 
 void BasePython::OnAppUnsuspend() {
   assert(g_base->InLogicThread());
-  objs().Get(BasePython::ObjID::kAppOnNativeUnsuspendCall).Call();
+  objs().Get(ObjID::kAppOnNativeUnsuspendCall).Call();
 }
 
 void BasePython::OnAppShutdown() {
   assert(g_base->InLogicThread());
-  objs().Get(BasePython::ObjID::kAppOnNativeShutdownCall).Call();
+  objs().Get(ObjID::kAppOnNativeShutdownCall).Call();
 }
 
 void BasePython::OnAppShutdownComplete() {
   assert(g_base->InLogicThread());
-  objs().Get(BasePython::ObjID::kAppOnNativeShutdownCompleteCall).Call();
+  objs().Get(ObjID::kAppOnNativeShutdownCompleteCall).Call();
 }
 
-void BasePython::DoApplyAppConfig() { assert(g_base->InLogicThread()); }
+void BasePython::ApplyAppConfig() { assert(g_base->InLogicThread()); }
 
-void BasePython::OnScreenSizeChange() { assert(g_base->InLogicThread()); }
+void BasePython::OnScreenSizeChange() {
+  assert(g_base->InLogicThread());
+
+  float screen_res_x{g_base->graphics->screen_virtual_width()};
+  float screen_res_y{g_base->graphics->screen_virtual_height()};
+
+  // This call runs for all screen sizes including the initial one. However
+  // we only want to inform the Python layer of *changes*, so we only store
+  // the initial one and don't pass it on.
+  if (last_screen_res_x_ < 0.0) {
+    last_screen_res_x_ = screen_res_x;
+    last_screen_res_y_ = g_base->graphics->screen_virtual_height();
+    return;
+  }
+
+  // Ignore any redundant values that might come through.
+  if (last_screen_res_x_ == screen_res_x
+      && last_screen_res_y_ == screen_res_y) {
+    return;
+  }
+
+  // Aight; we got a fresh, non-initial value. Store it and inform Python.
+  last_screen_res_x_ = screen_res_x;
+  last_screen_res_y_ = screen_res_y;
+
+  objs().Get(ObjID::kAppOnScreenSizeChangeCall).Call();
+}
 
 void BasePython::StepDisplayTime() { assert(g_base->InLogicThread()); }
 
@@ -177,18 +238,13 @@ void BasePython::OpenURLWithWebBrowserModule(const std::string& url) {
   // on errors.
   BA_PRECONDITION(g_base->InLogicThread());
   auto args = PythonRef::Stolen(Py_BuildValue("(s)", url.c_str()));
-  g_base->python->objs()
-      .Get(base::BasePython::ObjID::kOpenURLWithWebBrowserModuleCall)
-      .Call(args);
+  objs().Get(ObjID::kOpenURLWithWebBrowserModuleCall).Call(args);
 }
 
 // Return whether GetPyLString() will succeed for an object.
 auto BasePython::IsPyLString(PyObject* o) -> bool {
   assert(Python::HaveGIL());
   assert(o != nullptr);
-
-  // FIXME: Move this to base.
-  assert(base::g_base);
 
   return (PyUnicode_Check(o)
           || PyObject_IsInstance(o, objs().Get(ObjID::kLStrClass).get()));
@@ -265,10 +321,9 @@ auto BasePython::CanGetPyVector3f(PyObject* o) -> bool {
   if (PySequence_Fast_GET_SIZE(sequence.get()) != 3) {
     return false;
   }
-  return (
-      Python::CanGetPyDouble(PySequence_Fast_GET_ITEM(sequence.get(), 0))
-      && Python::CanGetPyDouble(PySequence_Fast_GET_ITEM(sequence.get(), 1))
-      && Python::CanGetPyDouble(PySequence_Fast_GET_ITEM(sequence.get(), 2)));
+  return (Python::IsNumber(PySequence_Fast_GET_ITEM(sequence.get(), 0))
+          && Python::IsNumber(PySequence_Fast_GET_ITEM(sequence.get(), 1))
+          && Python::IsNumber(PySequence_Fast_GET_ITEM(sequence.get(), 2)));
 }
 
 auto BasePython::GetPyVector3f(PyObject* o) -> Vector3f {
@@ -287,9 +342,9 @@ auto BasePython::GetPyVector3f(PyObject* o) -> Vector3f {
   if (PySequence_Fast_GET_SIZE(sequence.get()) != 3) {
     throw Exception("Sequence is not of size 3.", PyExcType::kValue);
   }
-  return {Python::GetPyFloat(PySequence_Fast_GET_ITEM(sequence.get(), 0)),
-          Python::GetPyFloat(PySequence_Fast_GET_ITEM(sequence.get(), 1)),
-          Python::GetPyFloat(PySequence_Fast_GET_ITEM(sequence.get(), 2))};
+  return {Python::GetFloat(PySequence_Fast_GET_ITEM(sequence.get(), 0)),
+          Python::GetFloat(PySequence_Fast_GET_ITEM(sequence.get(), 1)),
+          Python::GetFloat(PySequence_Fast_GET_ITEM(sequence.get(), 2))};
 }
 
 void BasePython::StoreEnv(PyObject* obj) { objs_.Store(ObjID::kEnv, obj); }
@@ -339,9 +394,9 @@ auto BasePython::GetRawConfigValue(const char* name, float default_value)
     return default_value;
   }
   try {
-    return Python::GetPyFloat(value);
+    return Python::GetFloat(value);
   } catch (const std::exception&) {
-    g_core->Log(
+    g_core->logging->Log(
         LogName::kBa, LogLevel::kError,
         "expected a float for config value '" + std::string(name) + "'");
     return default_value;
@@ -362,9 +417,9 @@ auto BasePython::GetRawConfigValue(const char* name,
     if (value == Py_None) {
       return {};
     }
-    return Python::GetPyFloat(value);
+    return Python::GetFloat(value);
   } catch (const std::exception&) {
-    g_core->Log(
+    g_core->logging->Log(
         LogName::kBa, LogLevel::kError,
         "expected a float for config value '" + std::string(name) + "'");
     return default_value;
@@ -380,9 +435,9 @@ auto BasePython::GetRawConfigValue(const char* name, int default_value) -> int {
     return default_value;
   }
   try {
-    return static_cast_check_fit<int>(Python::GetPyInt64(value));
+    return static_cast_check_fit<int>(Python::GetInt64(value));
   } catch (const std::exception&) {
-    g_core->Log(
+    g_core->logging->Log(
         LogName::kBa, LogLevel::kError,
         "Expected an int value for config value '" + std::string(name) + "'.");
     return default_value;
@@ -399,26 +454,26 @@ auto BasePython::GetRawConfigValue(const char* name, bool default_value)
     return default_value;
   }
   try {
-    return Python::GetPyBool(value);
+    return Python::GetBool(value);
   } catch (const std::exception&) {
-    g_core->Log(
+    g_core->logging->Log(
         LogName::kBa, LogLevel::kError,
         "Expected a bool value for config value '" + std::string(name) + "'.");
     return default_value;
   }
 }
 template <typename T>
-auto IsPyEnum(BasePython::ObjID enum_class_id, PyObject* obj) -> bool {
-  PyObject* enum_class_obj = g_base->python->objs().Get(enum_class_id).get();
+auto BasePython::IsPyEnum_(ObjID enum_class_id, PyObject* obj) -> bool {
+  PyObject* enum_class_obj = objs().Get(enum_class_id).get();
   assert(enum_class_obj != nullptr && enum_class_obj != Py_None);
   return static_cast<bool>(PyObject_IsInstance(obj, enum_class_obj));
 }
 
 template <typename T>
-auto GetPyEnum(BasePython::ObjID enum_class_id, PyObject* obj) -> T {
+auto BasePython::GetPyEnum_(ObjID enum_class_id, PyObject* obj) -> T {
   // First, make sure what they passed is an instance of the enum class
   // we want.
-  PyObject* enum_class_obj = g_base->python->objs().Get(enum_class_id).get();
+  PyObject* enum_class_obj = objs().Get(enum_class_id).get();
   assert(enum_class_obj != nullptr && enum_class_obj != Py_None);
   if (!PyObject_IsInstance(obj, enum_class_obj)) {
     throw Exception(Python::ObjToString(obj) + " is not an instance of "
@@ -444,29 +499,29 @@ auto GetPyEnum(BasePython::ObjID enum_class_id, PyObject* obj) -> T {
 }
 
 auto BasePython::GetPyEnum_Permission(PyObject* obj) -> Permission {
-  return GetPyEnum<Permission>(BasePython::ObjID::kPermissionClass, obj);
+  return GetPyEnum_<Permission>(ObjID::kPermissionClass, obj);
 }
 
 auto BasePython::GetPyEnum_SpecialChar(PyObject* obj) -> SpecialChar {
-  return GetPyEnum<SpecialChar>(BasePython::ObjID::kSpecialCharClass, obj);
+  return GetPyEnum_<SpecialChar>(ObjID::kSpecialCharClass, obj);
 }
 
 auto BasePython::GetPyEnum_QuitType(PyObject* obj) -> QuitType {
-  return GetPyEnum<QuitType>(BasePython::ObjID::kQuitTypeClass, obj);
+  return GetPyEnum_<QuitType>(ObjID::kQuitTypeClass, obj);
 }
 
 auto BasePython::IsPyEnum_InputType(PyObject* obj) -> bool {
-  return IsPyEnum<InputType>(BasePython::ObjID::kInputTypeClass, obj);
+  return IsPyEnum_<InputType>(ObjID::kInputTypeClass, obj);
 }
 
 auto BasePython::GetPyEnum_InputType(PyObject* obj) -> InputType {
-  return GetPyEnum<InputType>(BasePython::ObjID::kInputTypeClass, obj);
+  return GetPyEnum_<InputType>(ObjID::kInputTypeClass, obj);
 }
 
 // TODO(ericf): Make this a template.
 auto BasePython::PyQuitType(QuitType val) -> PythonRef {
   auto args = PythonRef::Stolen(Py_BuildValue("(i)", static_cast<int>(val)));
-  auto out = objs().Get(BasePython::ObjID::kQuitTypeClass).Call(args);
+  auto out = objs().Get(ObjID::kQuitTypeClass).Call(args);
   BA_PRECONDITION(out.exists());
   return out;
 }
@@ -476,8 +531,7 @@ auto BasePython::GetResource(const char* key, const char* fallback_resource,
   assert(Python::HaveGIL());
   PythonRef results;
   BA_PRECONDITION(key != nullptr);
-  const PythonRef& get_resource_call(
-      g_base->python->objs().Get(base::BasePython::ObjID::kGetResourceCall));
+  const PythonRef& get_resource_call(objs().Get(ObjID::kGetResourceCall));
   if (fallback_value != nullptr) {
     if (fallback_resource == nullptr) {
       BA_PRECONDITION(key != nullptr);
@@ -508,18 +562,18 @@ auto BasePython::GetResource(const char* key, const char* fallback_resource,
   }
   if (results.exists()) {
     try {
-      return g_base->python->GetPyLString(results.get());
+      return GetPyLString(results.get());
     } catch (const std::exception&) {
-      g_core->Log(LogName::kBa, LogLevel::kError,
-                  "GetResource failed for '" + std::string(key) + "'");
+      g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                           "GetResource failed for '" + std::string(key) + "'");
 
       // Hmm; I guess let's just return the key to help identify/fix the
       // issue?..
       return std::string("<res-err: ") + key + ">";
     }
   } else {
-    g_core->Log(LogName::kBa, LogLevel::kError,
-                "GetResource failed for '" + std::string(key) + "'");
+    g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                         "GetResource failed for '" + std::string(key) + "'");
   }
 
   // Hmm; I guess let's just return the key to help identify/fix the issue?..
@@ -532,19 +586,18 @@ auto BasePython::GetTranslation(const char* category, const char* s)
   PythonRef results;
   PythonRef args(Py_BuildValue("(ss)", category, s), PythonRef::kSteal);
   // Don't print errors.
-  results = g_base->python->objs()
-                .Get(base::BasePython::ObjID::kTranslateCall)
-                .Call(args, PythonRef(), false);
+  results = objs().Get(ObjID::kTranslateCall).Call(args, PythonRef(), false);
   if (results.exists()) {
     try {
-      return g_base->python->GetPyLString(results.get());
+      return GetPyLString(results.get());
     } catch (const std::exception&) {
-      g_core->Log(LogName::kBa, LogLevel::kError,
-                  "GetTranslation failed for '" + std::string(category) + "'");
+      g_core->logging->Log(
+          LogName::kBa, LogLevel::kError,
+          "GetTranslation failed for '" + std::string(category) + "'");
       return "";
     }
   } else {
-    g_core->Log(
+    g_core->logging->Log(
         LogName::kBa, LogLevel::kError,
         "GetTranslation failed for category '" + std::string(category) + "'");
   }
@@ -553,15 +606,13 @@ auto BasePython::GetTranslation(const char* category, const char* s)
 
 void BasePython::RunDeepLink(const std::string& url) {
   BA_PRECONDITION(g_base->InLogicThread());
-  if (g_base->python->objs().Exists(
-          base::BasePython::ObjID::kAppHandleDeepLinkCall)) {
+  if (objs().Exists(ObjID::kAppHandleDeepLinkCall)) {
     ScopedSetContext ssc(nullptr);
     PythonRef args(Py_BuildValue("(s)", url.c_str()), PythonRef::kSteal);
-    g_base->python->objs()
-        .Get(base::BasePython::ObjID::kAppHandleDeepLinkCall)
-        .Call(args);
+    objs().Get(ObjID::kAppHandleDeepLinkCall).Call(args);
   } else {
-    g_core->Log(LogName::kBa, LogLevel::kError, "Error on deep-link call");
+    g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                         "Error on deep-link call");
   }
 }
 
@@ -578,12 +629,11 @@ auto BasePython::CanPyStringEditAdapterBeReplaced(PyObject* o) -> bool {
   assert(g_base->InLogicThread());
 
   auto args = PythonRef::Stolen(Py_BuildValue("(O)", o));
-  auto result = g_base->python->objs()
-                    .Get(BasePython::ObjID::kStringEditAdapterCanBeReplacedCall)
-                    .Call(args);
+  auto result =
+      objs().Get(ObjID::kStringEditAdapterCanBeReplacedCall).Call(args);
   if (!result.exists()) {
-    g_core->Log(LogName::kBa, LogLevel::kError,
-                "Error getting StringEdit valid state.");
+    g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                         "Error getting StringEdit valid state.");
     return false;
   }
   if (result.get() == Py_True) {
@@ -592,14 +642,14 @@ auto BasePython::CanPyStringEditAdapterBeReplaced(PyObject* o) -> bool {
   if (result.get() == Py_False) {
     return false;
   }
-  g_core->Log(LogName::kBa, LogLevel::kError,
-              "Got unexpected value for StringEdit valid.");
+  g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                       "Got unexpected value for StringEdit valid.");
   return false;
 }
 
 void BasePython::OnAppActiveChanged() {
   assert(g_base->InLogicThread());
-  objs().Get(BasePython::ObjID::kAppOnNativeActiveChangedCall).Call();
+  objs().Get(ObjID::kAppOnNativeActiveChangedCall).Call();
 }
 
 }  // namespace ballistica::base

@@ -75,7 +75,7 @@ class EditProfileWindow(
         yoffs = -42 if uiscale is bui.UIScale.SMALL else 0
         spacing = 40
         self._base_scale = (
-            1.6
+            2.0
             if uiscale is bui.UIScale.SMALL
             else 1.35 if uiscale is bui.UIScale.MEDIUM else 1.0
         )
@@ -84,12 +84,8 @@ class EditProfileWindow(
             root_widget=bui.containerwidget(
                 size=(width, height + top_extra),
                 scale=self._base_scale,
-                stack_offset=(
-                    (0, 0) if uiscale is bui.UIScale.SMALL else (0, 0)
-                ),
-                toolbar_visibility=(
-                    None if uiscale is bui.UIScale.SMALL else 'menu_full'
-                ),
+                stack_offset=(0, 0),
+                toolbar_visibility=None,
             ),
             transition=transition,
             origin_widget=origin_widget,
@@ -550,7 +546,7 @@ class EditProfileWindow(
 
     def upgrade_profile(self) -> None:
         """Attempt to upgrade the profile to global."""
-        from bauiv1lib import account
+        from bauiv1lib.account.signin import show_sign_in_prompt
         from bauiv1lib.profile import upgrade as pupgrade
 
         new_name = self.getname().strip()
@@ -565,8 +561,8 @@ class EditProfileWindow(
         plus = bui.app.plus
         assert plus is not None
 
-        if plus.get_v1_account_state() != 'signed_in':
-            account.show_sign_in_prompt()
+        if plus.accounts.primary is None:
+            show_sign_in_prompt()
             return
 
         pupgrade.ProfileUpgradeWindow(self)
@@ -695,9 +691,9 @@ class EditProfileWindow(
         )
 
     def _on_character_press(self) -> None:
-        from bauiv1lib import characterpicker
+        from bauiv1lib.characterpicker import CharacterPicker
 
-        characterpicker.CharacterPicker(
+        CharacterPicker(
             parent=self._root_widget,
             position=self._character_button.get_screen_space_center(),
             selected_character=self._spazzes[self._icon_index],
@@ -707,9 +703,9 @@ class EditProfileWindow(
         )
 
     def _on_icon_press(self) -> None:
-        from bauiv1lib import iconpicker
+        from bauiv1lib.iconpicker import IconPicker
 
-        iconpicker.IconPicker(
+        IconPicker(
             parent=self._root_widget,
             position=self._icon_button.get_screen_space_center(),
             selected_icon=self._icon,

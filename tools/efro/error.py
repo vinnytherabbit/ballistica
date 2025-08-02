@@ -106,8 +106,10 @@ class AuthenticationError(Exception):
     """
 
 
-class _Urllib3HttpError(Exception):
-    """Exception raised for non-200 html codes."""
+class Urllib3HttpError(Exception):
+    """Exception raised for non-200 html codes by
+    :func:`raise_for_urllib3_status()`.
+    """
 
     def __init__(self, code: int) -> None:
         self.code = code
@@ -129,7 +131,7 @@ def raise_for_urllib3_status(
 ) -> None:
     """Raise an exception for html error codes aside from 200."""
     if response.status != 200:
-        raise _Urllib3HttpError(code=response.status)
+        raise Urllib3HttpError(code=response.status)
 
 
 def is_urllib3_communication_error(exc: BaseException, url: str | None) -> bool:
@@ -145,19 +147,50 @@ def is_urllib3_communication_error(exc: BaseException, url: str | None) -> bool:
     These errors can often be safely ignored or presented to the user as
     general 'network-unavailable' states.
     """
+    # pylint: disable=too-many-return-statements
+
     # Need to start building these up. For now treat everything as a
     # real error.
     import urllib3.exceptions
 
-    if isinstance(exc, _Urllib3HttpError):
+    # If this error is from hitting max-retries, look at the underlying
+    # error instead.
+    if isinstance(exc, urllib3.exceptions.MaxRetryError):
+        # Hmm; will a max-retry error ever not have an underlying error?
+        if exc.reason is None:
+            return False
+        exc = exc.reason
+
+    if isinstance(exc, Urllib3HttpError):
         # Special sub-case: appspot.com hosting seems to give 403 errors
-        # (forbidden) to some countries. I'm assuming for legal reasons?..
-        # Let's consider that a communication error since its out of our
-        # control so we don't fill up logs with it.
+        # (forbidden) to some countries (presumably blocked by
+        # governments or whatnot). Let's consider that a communication
+        # error since its out of our control so we don't fill up logs
+        # with it.
         if exc.code == 403 and url is not None and '.appspot.com' in url:
             return True
 
-    elif isinstance(exc, urllib3.exceptions.ReadTimeoutError):
+        # Another special case; we tend to get the occasional flukish
+        # gateway error when sending between our servers; treat those as
+        # comm-errors.
+        if exc.code == 502 and url is not None and 'ballistica.net' in url:
+            return True
+
+    elif isinstance(
+        exc,
+        (
+            urllib3.exceptions.ConnectTimeoutError,
+            urllib3.exceptions.ReadTimeoutError,
+            urllib3.exceptions.NewConnectionError,
+            urllib3.exceptions.SSLError,
+        ),
+    ):
+        return True
+
+    elif isinstance(exc, urllib3.exceptions.NameResolutionError):
+        # Technically could be a sign of an error on our end, but most
+        # people running into this will be due to wonky dns on their end,
+        # so treating it as a comm error.
         return True
 
     elif isinstance(exc, urllib3.exceptions.ProtocolError):
@@ -165,7 +198,10 @@ def is_urllib3_communication_error(exc: BaseException, url: str | None) -> bool:
         # may be due to server misconfigurations or whatnot so let's
         # take it on a case by case basis.
         excstr = str(exc)
-        if 'Connection aborted.' in excstr:
+        if (
+            'Connection aborted.' in excstr
+            or 'Software caused connection abort' in excstr
+        ):
             return True
 
     return False

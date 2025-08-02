@@ -8,8 +8,9 @@
 #include "ballistica/base/graphics/component/empty_component.h"
 #include "ballistica/base/graphics/component/simple_component.h"
 #include "ballistica/base/support/app_timer.h"
+#include "ballistica/base/ui/ui.h"
+#include "ballistica/core/core.h"
 #include "ballistica/core/platform/core_platform.h"
-#include "ballistica/shared/foundation/inline.h"
 
 namespace ballistica::ui_v1 {
 
@@ -19,7 +20,6 @@ HScrollWidget::HScrollWidget()
     : touch_mode_(!g_core->platform->IsRunningOnDesktop()) {
   set_draggable(false);
   set_claims_left_right(false);
-  set_claims_tab(false);
 }
 
 HScrollWidget::~HScrollWidget() = default;
@@ -218,9 +218,9 @@ auto HScrollWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
                 // Go ahead and send a mouse-up to the sub-widgets; in their
                 // eyes the click is canceled.
                 if (touch_down_sent_ && !touch_up_sent_) {
-                  ContainerWidget::HandleMessage(
-                      base::WidgetMessage(base::WidgetMessage::Type::kMouseUp,
-                                          nullptr, m.fval1, m.fval2, true));
+                  ContainerWidget::HandleMessage(base::WidgetMessage(
+                      base::WidgetMessage::Type::kMouseCancel, nullptr, m.fval1,
+                      m.fval2, true));
                   touch_up_sent_ = true;
                 }
               }
@@ -253,11 +253,13 @@ auto HScrollWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
           break;
         }
         float child_w = (**i).GetWidth();
-        float sRight = width() - border_width_;
-        float sLeft = border_width_;
-        float rate =
-            (child_w - (sRight - sLeft))
-            / ((1.0f - ((sRight - sLeft) / child_w)) * (sRight - sLeft));
+        float s_right = width() - border_width_;
+        float s_left = border_width_;
+        // Note: need a max on denominator here or we can get nan due to
+        // divide-by-zero.
+        float rate = (child_w - (s_right - s_left))
+                     / std::max(1.0f, ((1.0f - ((s_right - s_left) / child_w))
+                                       * (s_right - s_left)));
         child_offset_h_ = thumb_click_start_child_offset_h_
                           - rate * (x - thumb_click_start_h_);
 
@@ -267,7 +269,8 @@ auto HScrollWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
       }
       break;
     }
-    case base::WidgetMessage::Type::kMouseUp: {
+    case base::WidgetMessage::Type::kMouseUp:
+    case base::WidgetMessage::Type::kMouseCancel: {
       mouse_held_scroll_down_ = false;
       mouse_held_scroll_up_ = false;
       mouse_held_thumb_ = false;
@@ -286,23 +289,24 @@ auto HScrollWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
 
           // If we're not claiming it and we haven't sent a mouse_down yet
           // due to our delay, send that first.
-          if (!claimed2 && !touch_down_sent_) {
-            ContainerWidget::HandleMessage(base::WidgetMessage(
-                base::WidgetMessage::Type::kMouseDown, nullptr, m.fval1,
-                m.fval2, static_cast<float>(touch_held_click_count_)));
-            touch_down_sent_ = true;
+          if (m.type == base::WidgetMessage::Type::kMouseUp) {
+            if (!claimed2 && !touch_down_sent_) {
+              ContainerWidget::HandleMessage(base::WidgetMessage(
+                  base::WidgetMessage::Type::kMouseDown, nullptr, m.fval1,
+                  m.fval2, static_cast<float>(touch_held_click_count_)));
+              touch_down_sent_ = true;
+            }
           }
           if (touch_down_sent_ && !touch_up_sent_) {
-            ContainerWidget::HandleMessage(
-                base::WidgetMessage(base::WidgetMessage::Type::kMouseUp,
-                                    nullptr, m.fval1, m.fval2, claimed2));
+            ContainerWidget::HandleMessage(base::WidgetMessage(
+                m.type, nullptr, m.fval1, m.fval2, claimed2));
             touch_up_sent_ = true;
           }
           return true;
         }
       }
 
-      // If coords are outside of our bounds, pass a mouse-up along for
+      // If coords are outside of our bounds, pass a mouse-cancel along for
       // anyone tracking a drag, but mark it as claimed so it doesn't
       // actually get acted on.
       float x = m.fval1;
@@ -310,8 +314,8 @@ auto HScrollWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
       if (!((y >= 0.0f) && (y < height()) && (x >= 0.0f) && (x < width()))) {
         pass = false;
         ContainerWidget::HandleMessage(
-            base::WidgetMessage(base::WidgetMessage::Type::kMouseUp, nullptr,
-                                m.fval1, m.fval2, true));
+            base::WidgetMessage(base::WidgetMessage::Type::kMouseCancel,
+                                nullptr, m.fval1, m.fval2, true));
       }
 
       break;
@@ -726,7 +730,7 @@ void HScrollWidget::Draw(base::RenderPass* pass, bool draw_transparent) {
             c.ScopedScissor({l + border_width_, b + border_height_ + 1,
                              l + (width()), b + (height() * 0.995f)});
         auto xf = c.ScopedTransform();
-        c.Translate(thumb_center_x_, thumb_center_y_, 0.8f);
+        c.Translate(thumb_center_x_, thumb_center_y_, 0.75f);
         c.Scale(-thumb_width_, thumb_height_, 0.1f);
         c.FlipCullFace();
         c.Rotate(-90, 0, 0, 1);
@@ -779,9 +783,10 @@ void HScrollWidget::Draw(base::RenderPass* pass, bool draw_transparent) {
   if (draw_transparent && IsHierarchySelected()
       && g_base->ui->ShouldHighlightWidgets() && highlight_
       && border_opacity_ > 0.0f) {
-    float m = 0.8f
-              + std::abs(sinf(static_cast<float>(current_time_ms) * 0.006467f))
-                    * 0.2f * border_opacity_;
+    float m = (0.8f
+               + std::abs(sinf(static_cast<float>(current_time_ms) * 0.006467f))
+                     * 0.2f)
+              * border_opacity_;
 
     if (glow_dirty_) {
       float r2 = l + width();

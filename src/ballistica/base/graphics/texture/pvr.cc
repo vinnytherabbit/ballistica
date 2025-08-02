@@ -6,7 +6,9 @@
 #include <cstdio>
 #include <string>
 
+#include "ballistica/core/core.h"
 #include "ballistica/core/platform/core_platform.h"
+#include "ballistica/shared/foundation/exception.h"
 
 namespace ballistica::base {
 

@@ -24,7 +24,8 @@ from efro.terminal import Clr
 
 if TYPE_CHECKING:
     from types import ModuleType
-    from typing import Sequence, Any
+    from typing import Sequence, Any, Literal
+
     from batools.docs import AttributeInfo
 
 
@@ -41,13 +42,13 @@ def _get_varying_func_info(sig_in: str) -> tuple[str, str]:
         sig = (
             '# Show that ur return type varies based on "doraise" value:\n'
             '@overload\n'
-            'def getdelegate(self, type: type[_T],'
-            ' doraise: Literal[False] = False) -> _T | None:\n'
+            'def getdelegate[T](self, type: type[T],'
+            ' doraise: Literal[False] = False) -> T | None:\n'
             '    ...\n'
             '\n'
             '@overload\n'
-            'def getdelegate(self, type: type[_T],'
-            ' doraise: Literal[True]) -> _T:\n'
+            'def getdelegate[T](self, type: type[T],'
+            ' doraise: Literal[True]) -> T:\n'
             '    ...\n'
             '\n'
             'def getdelegate(self, type: Any,'
@@ -278,6 +279,8 @@ def _writefuncs(
                 returnstr = 'return _uninferrable()'
             elif returns == 'tuple[float, float]':
                 returnstr = 'return (0.0, 0.0)'
+            elif returns == 'tuple[float, float, float]':
+                returnstr = 'return (0.0, 0.0, 0.0)'
             elif returns == 'str | None':
                 returnstr = "return ''"
             elif returns == 'int | None':
@@ -342,12 +345,17 @@ def _writefuncs(
                 returnstr = 'return ' + returns + '()'
             else:
                 raise RuntimeError(
-                    f'unknown returns value: {returns} for {funcname}'
+                    f'Unknown returns value: {returns} for {funcname}'
                 )
+            returnstr = (
+                f'# This is a dummy stub;'
+                f' the actual implementation is native code.\n{returnstr}'
+            )
+
         returnspc = indstr + '    '
         returnstr = ('\n' + returnspc).join(returnstr.strip().splitlines())
         docstr_out = _formatdoc(
-            _filterdoc(docstr, funcname=funcname), indent + 4
+            _filterdoc(docstr, funcname=funcname), indent + 4, form='str'
         )
         out += spcstr + defslines + docstr_out + f'{returnspc}{returnstr}\n'
     return out
@@ -500,32 +508,50 @@ def _special_class_cases(classname: str) -> str:
             '    bomb_pressed: bool = False\n'
             '    fly_pressed: bool = False\n'
             '    hold_position_pressed: bool = False\n'
+            '    #: Available on spaz node.\n'
             '    knockout: float = 0.0\n'
             '    invincible: bool = False\n'
             '    stick_to_owner: bool = False\n'
             '    damage: int = 0\n'
+            '    #: Available on spaz node.\n'
             '    run: float = 0.0\n'
+            '    #: Available on spaz node.\n'
             '    move_up_down: float = 0.0\n'
+            '    #: Available on spaz node.\n'
             '    move_left_right: float = 0.0\n'
             '    curse_death_time: int = 0\n'
             '    boxing_gloves: bool = False\n'
             '    hockey: bool = False\n'
             '    use_fixed_vr_overlay: bool = False\n'
+            '    #: Available on globals node.\n'
             '    allow_kick_idle_players: bool = False\n'
             '    music_continuous: bool = False\n'
             '    music_count: int = 0\n'
+            '    #: Available on spaz node.\n'
             '    hurt: float = 0.0\n'
+            '    #: On shield node.\n'
             '    always_show_health_bar: bool = False\n'
+            '    #: Available on spaz node.\n'
             '    mini_billboard_1_texture: bascenev1.Texture | None = None\n'
+            '    #: Available on spaz node.\n'
             '    mini_billboard_1_start_time: int = 0\n'
+            '    #: Available on spaz node.\n'
             '    mini_billboard_1_end_time: int = 0\n'
+            '    #: Available on spaz node.\n'
             '    mini_billboard_2_texture: bascenev1.Texture | None = None\n'
+            '    #: Available on spaz node.\n'
             '    mini_billboard_2_start_time: int = 0\n'
+            '    #: Available on spaz node.\n'
             '    mini_billboard_2_end_time: int = 0\n'
+            '    #: Available on spaz node.\n'
             '    mini_billboard_3_texture: bascenev1.Texture | None = None\n'
+            '    #: Available on spaz node.\n'
             '    mini_billboard_3_start_time: int = 0\n'
+            '    #: Available on spaz node.\n'
             '    mini_billboard_3_end_time: int = 0\n'
+            '    #: Available on spaz node.\n'
             '    boxing_gloves_flashing: bool = False\n'
+            '    #: Available on spaz node.\n'
             '    dead: bool = False\n'
             '    floor_reflection: bool = False\n'
             '    debris_friction: float = 0.0\n'
@@ -544,9 +570,13 @@ def _special_class_cases(classname: str) -> str:
             '    shadow_range: Sequence[float] = (0, 0, 0, 0)\n'
             "    counter_text: str = ''\n"
             '    counter_texture: bascenev1.Texture | None = None\n'
+            '    #: Available on spaz node.\n'
             '    shattered: int = 0\n'
+            '    #: Available on spaz node.\n'
             '    billboard_texture: bascenev1.Texture | None = None\n'
+            '    #: Available on spaz node.\n'
             '    billboard_cross_out: bool = False\n'
+            '    #: Available on spaz node.\n'
             '    billboard_opacity: float = 0.0\n'
             '    slow_motion: bool = False\n'
             "    music: str = ''\n"
@@ -611,10 +641,13 @@ def _filterdoc(docstr: str, funcname: str | None = None) -> str:
         and docslines[0]
         and docslines[0].startswith(funcname)
     ):
-        # Remove this signature from python docstring
-        # as not to repeat ourselves.
-        _, docstr = docstr.split('\n\n', maxsplit=1)
-        docslines = docstr.splitlines()
+        if '\n' in docstr:
+            # Remove this signature from python docstring
+            # as not to repeat ourselves.
+            _, docstr = docstr.split('\n\n', maxsplit=1)
+            docslines = docstr.splitlines()
+        else:
+            docstr = ''
 
     # Assuming that each line between 'Attributes:' and '\n\n' belongs to
     # attrs descriptions.
@@ -646,33 +679,44 @@ def _filterdoc(docstr: str, funcname: str | None = None) -> str:
 def _formatdoc(
     docstr: str,
     indent: int,
-    no_end_newline: bool = False,
-    inner_indent: int = 0,
+    form: Literal['str', 'comment'],
+    # *,
+    # no_end_newline: bool = False,
+    # inner_indent: int = 0,
 ) -> str:
     out = ''
     indentstr = indent * ' '
-    inner_indent_str = inner_indent * ' '
+    # inner_indent_str = inner_indent * ' '
+    # inner_indent_str = ''
     docslines = docstr.splitlines()
 
-    if len(docslines) == 1:
+    if len(docslines) == 1 and form == 'str':
         out += indentstr + '"""' + docslines[0] + '"""\n'
     else:
         for i, line in enumerate(docslines):
-            if i != 0 and line != '':
-                docslines[i] = indentstr + inner_indent_str + line
-        out += (
-            indentstr
-            + '"""'
-            + '\n'.join(docslines)
-            + ('' if no_end_newline else '\n' + indentstr)
-            + '"""\n'
-        )
+            if form == 'comment':
+                docslines[i] = indentstr + '#: ' + line
+            else:
+                if i != 0 and line != '':
+                    docslines[i] = indentstr + line
+        if form == 'comment':
+            out += '\n'.join(docslines) + '\n'
+        else:
+            out += (
+                indentstr
+                + '"""'
+                + '\n'.join(docslines)
+                + '\n'
+                + indentstr
+                + '"""\n'
+            )
     return out
 
 
 def _writeclasses(module: ModuleType, classnames: Sequence[str]) -> str:
     # pylint: disable=too-many-branches
     # pylint: disable=too-many-statements
+    # pylint: disable=too-many-locals
     from batools.docs import parse_docs_attrs
 
     out = ''
@@ -680,7 +724,7 @@ def _writeclasses(module: ModuleType, classnames: Sequence[str]) -> str:
         cls = getattr(module, classname)
         if cls is None:
             raise RuntimeError('unexpected')
-        out += '\n' '\n'
+        out += '\n\n'
 
         # Special case: get PyCharm to shut up about Node's methods
         # shadowing builtin types.
@@ -696,21 +740,22 @@ def _writeclasses(module: ModuleType, classnames: Sequence[str]) -> str:
             out += f'class {classname}:\n'
 
         docstr = cls.__doc__
-        # classname is constructor name
-        out += _formatdoc(_filterdoc(docstr, funcname=classname), 4)
 
-        # Create a public constructor if it has one.
-        # If the first docs line appears to be a function signature
-        # and not category or a usage statement ending with a period,
-        # assume it has a public constructor.
+        # Classname is constructor name.
+        out += _formatdoc(_filterdoc(docstr, funcname=classname), 4, form='str')
+
+        # Create a public constructor if it has one. If the first docs
+        # line appears to be a function signature and not category or a
+        # usage statement ending with a period, assume it has a public
+        # constructor.
         has_constructor = False
         if (
             'category:' not in docstr.splitlines()[0].lower()
             and not docstr.splitlines()[0].endswith('.')
             and docstr != '(internal)'
         ):
-            # Ok.. looks like the first line is a signature.
-            # Make sure we've got a signature followed by a blank line.
+            # Ok.. looks like the first line is a signature. Make sure
+            # we've got a signature followed by a blank line.
             if '\n\n' not in docstr:
                 raise RuntimeError(
                     f'Constructor docstr missing empty line for {cls}.'
@@ -732,18 +777,17 @@ def _writeclasses(module: ModuleType, classnames: Sequence[str]) -> str:
         # declarations for any that we find.
         attrs: list[AttributeInfo] = []
         parse_docs_attrs(attrs, docstr)
+        has_attrs = False
         if attrs:
             for attr in attrs:
                 if attr.attr_type is not None:
-                    out += f'    {attr.name}: {attr.attr_type}\n'
                     if attr.docs:
-                        out += _formatdoc(
-                            _filterdoc(attr.docs),
-                            indent=4,
-                            inner_indent=3,
-                            no_end_newline=True,
-                        )
                         out += '\n'
+                        out += _formatdoc(
+                            _filterdoc(attr.docs), indent=4, form='comment'
+                        )
+                    has_attrs = True
+                    out += f'    {attr.name}: {attr.attr_type}\n'
                 else:
                     raise RuntimeError(
                         f'Found untyped attr in'
@@ -770,7 +814,7 @@ def _writeclasses(module: ModuleType, classnames: Sequence[str]) -> str:
         functxt = _writefuncs(
             cls, funcnames, indent=4, spacing=1, as_method=True
         )
-        if functxt == '' and not has_constructor:
+        if functxt == '' and not has_constructor and not has_attrs:
             out += '    pass\n'
         else:
             out += functxt
@@ -817,12 +861,12 @@ class Generator:
         funcnames.sort()
         classnames.sort()
         typing_imports = (
-            'TYPE_CHECKING, overload, override, Sequence, TypeVar'
+            'TYPE_CHECKING, overload, override, Sequence'
             if self.mname == '_babase'
             else (
-                'TYPE_CHECKING, overload, override, TypeVar'
+                'TYPE_CHECKING, overload, override'
                 if self.mname == '_bascenev1'
-                else 'TYPE_CHECKING, override, TypeVar'
+                else 'TYPE_CHECKING, override'
             )
         )
         typing_imports_tc = (
@@ -841,7 +885,9 @@ class Generator:
         tc_import_lines_extra = ''
         if self.mname == '_babase':
             tc_import_lines_extra += (
-                '    from babase import App\n    import babase\n'
+                '    import bacommon.app\n'
+                '    from babase import App\n'
+                '    import babase\n'  # hold
             )
         elif self.mname == '_bascenev1':
             tc_import_lines_extra += '    import babase\n    import bascenev1\n'
@@ -904,8 +950,8 @@ class Generator:
             f'    from typing import {typing_imports_tc}\n'
             f'{tc_import_lines_extra}'
             '\n'
-            '\n'
-            "_T = TypeVar('_T')\n"
+            # '\n'
+            # "_T = TypeVar('_T')\n"
             '\n'
             f'{app_declare_lines}'
             'def _uninferrable() -> Any:\n'
@@ -959,8 +1005,8 @@ def generate_dummy_modules(projroot: str) -> None:
     pycmd = (
         f'import sys\n'
         f'sys.path.append("build/assets/ba_data/python")\n'
+        f'sys.path.append("build/assets/ba_data/python-site-packages")\n'
         f'sys.path.append("{toolsdir}")\n'
-        # f'sys.path.append("{venvpath}")\n'
         f'from batools import dummymodule\n'
     )
 

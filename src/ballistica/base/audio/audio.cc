@@ -8,7 +8,8 @@
 #include "ballistica/base/audio/audio_source.h"
 #include "ballistica/base/graphics/graphics.h"
 #include "ballistica/base/support/app_config.h"
-#include "ballistica/core/platform/core_platform.h"  // IWYU pragma: keep.
+#include "ballistica/core/core.h"
+#include "ballistica/core/logging/logging.h"
 #include "ballistica/shared/foundation/event_loop.h"
 
 namespace ballistica::base {
@@ -45,7 +46,7 @@ void Audio::OnAppShutdownComplete() { assert(g_base->InLogicThread()); }
 
 void Audio::StepDisplayTime() { assert(g_base->InLogicThread()); }
 
-void Audio::DoApplyAppConfig() {
+void Audio::ApplyAppConfig() {
   assert(g_base->InLogicThread());
   SetVolumes(g_base->app_config->Resolve(AppConfig::FloatID::kMusicVolume),
              g_base->app_config->Resolve(AppConfig::FloatID::kSoundVolume));
@@ -156,7 +157,7 @@ auto Audio::SourceBeginExisting(uint32_t play_id, int debug_id)
 }
 
 auto Audio::ShouldPlay(SoundAsset* sound) -> bool {
-  millisecs_t time = g_core->GetAppTimeMillisecs();
+  millisecs_t time = g_core->AppTimeMillisecs();
   assert(sound);
   return (time - sound->last_play_time() > 50);
 }
@@ -167,21 +168,24 @@ auto Audio::SafePlaySysSound(SysSoundID sound_id) -> std::optional<uint32_t> {
     return {};
   }
   if (!g_base->InLogicThread()) {
-    g_core->Log(LogName::kBaAudio, LogLevel::kError,
-                "Audio::SafePlaySysSound called from non-logic thread. id="
-                    + std::to_string(static_cast<int>(sound_id)));
+    g_core->logging->Log(
+        LogName::kBaAudio, LogLevel::kError,
+        "Audio::SafePlaySysSound called from non-logic thread. id="
+            + std::to_string(static_cast<int>(sound_id)));
     return {};
   }
   if (!g_base->assets->sys_assets_loaded()) {
-    g_core->Log(LogName::kBaAudio, LogLevel::kWarning,
-                "Audio::SafePlaySysSound called before sys assets loaded. id="
-                    + std::to_string(static_cast<int>(sound_id)));
+    g_core->logging->Log(
+        LogName::kBaAudio, LogLevel::kWarning,
+        "Audio::SafePlaySysSound called before sys assets loaded. id="
+            + std::to_string(static_cast<int>(sound_id)));
     return {};
   }
   if (!g_base->assets->IsValidSysSound(sound_id)) {
-    g_core->Log(LogName::kBaAudio, LogLevel::kWarning,
-                "Audio::SafePlaySysSound called with invalid sound_id. id="
-                    + std::to_string(static_cast<int>(sound_id)));
+    g_core->logging->Log(
+        LogName::kBaAudio, LogLevel::kWarning,
+        "Audio::SafePlaySysSound called with invalid sound_id. id="
+            + std::to_string(static_cast<int>(sound_id)));
     return {};
   }
   return PlaySound(g_base->assets->SysSound(sound_id));

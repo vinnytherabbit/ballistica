@@ -9,6 +9,8 @@
 #include "ballistica/base/input/input.h"
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/base/support/app_config.h"
+#include "ballistica/core/core.h"
+#include "ballistica/core/logging/logging_macros.h"
 
 namespace ballistica::base {
 
@@ -29,7 +31,7 @@ void AppAdapter::OnAppUnsuspend() { assert(g_base->InLogicThread()); }
 void AppAdapter::OnAppShutdown() { assert(g_base->InLogicThread()); }
 void AppAdapter::OnAppShutdownComplete() { assert(g_base->InLogicThread()); }
 void AppAdapter::OnScreenSizeChange() { assert(g_base->InLogicThread()); }
-void AppAdapter::DoApplyAppConfig() { assert(g_base->InLogicThread()); }
+void AppAdapter::ApplyAppConfig() { assert(g_base->InLogicThread()); }
 
 void AppAdapter::RunMainThreadEventLoopToCompletion() {
   FatalError("RunMainThreadEventLoopToCompletion is not implemented here.");

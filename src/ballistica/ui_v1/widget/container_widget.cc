@@ -11,6 +11,8 @@
 #include "ballistica/base/graphics/component/simple_component.h"
 #include "ballistica/base/logic/logic.h"
 #include "ballistica/base/python/support/python_context_call.h"
+#include "ballistica/base/ui/ui.h"
+#include "ballistica/base/ui/widget_message.h"
 #include "ballistica/shared/foundation/event_loop.h"
 #include "ballistica/shared/generic/utils.h"
 #include "ballistica/shared/math/random.h"
@@ -61,18 +63,18 @@ void ContainerWidget::DrawChildren(base::RenderPass* pass,
 
   // We're expected to fill z space 0..1 when we draw... so we need to divide
   // that space between our child widgets plus our bg layer.
-  float layer_thickness = 0.0f;
-  float layer_spacing = 0.0f;
-  float base_offset = 0.0f;
-  float layer_thickness1 = 0.0f;
-  float layer_thickness2 = 0.0f;
-  float layer_thickness3 = 0.0f;
-  float layer_spacing1 = 0.0f;
-  float layer_spacing2 = 0.0f;
-  float layer_spacing3 = 0.0f;
-  float base_offset1 = 0.0f;
-  float base_offset2 = 0.0f;
-  float base_offset3 = 0.0f;
+  float layer_thickness{};
+  float layer_spacing{};
+  float base_offset{};
+  float layer_thickness1{};
+  float layer_thickness2{};
+  float layer_thickness3{};
+  float layer_spacing1{};
+  float layer_spacing2{};
+  float layer_spacing3{};
+  float base_offset1{};
+  float base_offset2{};
+  float base_offset3{};
 
   // In single-depth mode we draw all widgets at the same depth so they each get
   // our full depth resolution. however they may overlap incorrectly.
@@ -203,12 +205,17 @@ void ContainerWidget::DrawChildren(base::RenderPass* pass,
         // Widgets can opt to use a subset of their allotted depth slice.
         float d_min = w.depth_range_min();
         float d_max = w.depth_range_max();
+        float this_z_offs;
+        float this_layer_thickness;
         if (d_min != 0.0f || d_max != 1.0f) {
-          z_offs += layer_thickness * d_min;
-          layer_thickness *= (d_max - d_min);
+          this_z_offs = z_offs + layer_thickness * d_min;
+          this_layer_thickness = layer_thickness * (d_max - d_min);
+        } else {
+          this_z_offs = z_offs;
+          this_layer_thickness = layer_thickness;
         }
-        c.Translate(x_offset + tx, y_offset + ty, z_offs);
-        c.Scale(s, s, layer_thickness);
+        c.Translate(x_offset + tx, y_offset + ty, this_z_offs);
+        c.Scale(s, s, this_layer_thickness);
         c.Submit();
         w.Draw(pass, draw_transparent);
       }
@@ -276,12 +283,17 @@ void ContainerWidget::DrawChildren(base::RenderPass* pass,
         // Widgets can opt to use a subset of their allotted depth slice.
         float d_min = w.depth_range_min();
         float d_max = w.depth_range_max();
+        float this_z_offs;
+        float this_layer_thickness;
         if (d_min != 0.0f || d_max != 1.0f) {
-          z_offs += layer_thickness * d_min;
-          layer_thickness *= (d_max - d_min);
+          this_z_offs = z_offs + layer_thickness * d_min;
+          this_layer_thickness = layer_thickness * (d_max - d_min);
+        } else {
+          this_z_offs = z_offs;
+          this_layer_thickness = layer_thickness;
         }
-        c.Translate(x_offset + tx, y_offset + ty, z_offs);
-        c.Scale(s, s, layer_thickness);
+        c.Translate(x_offset + tx, y_offset + ty, this_z_offs);
+        c.Scale(s, s, this_layer_thickness);
         c.Submit();
         w.Draw(pass, draw_transparent);
       }
@@ -358,12 +370,9 @@ auto ContainerWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
       break;
     }
 
-    case base::WidgetMessage::Type::kTabNext:
+    // case base::WidgetMessage::Type::kTabNext:
     case base::WidgetMessage::Type::kMoveRight:
     case base::WidgetMessage::Type::kMoveDown: {
-      if (m.type == base::WidgetMessage::Type::kTabNext && !claims_tab_) {
-        break;
-      }
       if (m.type == base::WidgetMessage::Type::kMoveRight
           && !claims_left_right_) {
         break;
@@ -394,12 +403,9 @@ auto ContainerWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
       break;
     }
 
-    case base::WidgetMessage::Type::kTabPrev:
+    // case base::WidgetMessage::Type::kTabPrev:
     case base::WidgetMessage::Type::kMoveLeft:
     case base::WidgetMessage::Type::kMoveUp: {
-      if (m.type == base::WidgetMessage::Type::kTabPrev && !claims_tab_) {
-        break;
-      }
       if (m.type == base::WidgetMessage::Type::kMoveLeft
           && !claims_left_right_) {
         break;
@@ -642,7 +648,8 @@ auto ContainerWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
       }
       break;
     }
-    case base::WidgetMessage::Type::kMouseUp: {
+    case base::WidgetMessage::Type::kMouseUp:
+    case base::WidgetMessage::Type::kMouseCancel: {
       CheckLayout();
       dragging_ = false;
       float x = m.fval1;
@@ -673,14 +680,16 @@ auto ContainerWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
       float bottom_overlap = 2;
       float top_overlap = 2;
 
-      // When pressed, we *always* claim mouse-ups.
+      // When pressed, we *always* claim mouse-ups/cancels.
       if (pressed_) {
         pressed_ = false;
 
         // If we're pressed, mouse-ups within our region trigger activation.
         if (pressed_activate_ && !claimed && x >= l && x < r
             && y >= b - bottom_overlap && y < t + top_overlap) {
-          Activate();
+          if (m.type == base::WidgetMessage::Type::kMouseUp) {
+            Activate();
+          }
           pressed_activate_ = false;
         }
         return true;
@@ -688,9 +697,12 @@ auto ContainerWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
       // If its not yet claimed, see if its within our contained region, in
       // which case we claim it but do nothing.
       if (!claimed) {
-        if (background_)
-          if (x >= l && x < r && y >= b - bottom_overlap && y < t + top_overlap)
+        if (background_) {
+          if (x >= l && x < r && y >= b - bottom_overlap
+              && y < t + top_overlap) {
             claimed = true;
+          }
+        }
       }
       break;
     }
@@ -1277,7 +1289,8 @@ void ContainerWidget::SetTransition(TransitionType t) {
 
 void ContainerWidget::ReselectLastSelectedWidget() {
   if (prev_selected_widget_ != nullptr
-      && prev_selected_widget_ != selected_widget_) {
+      && prev_selected_widget_ != selected_widget_
+      && prev_selected_widget_->IsSelectable()) {
     SelectWidget(prev_selected_widget_);
   }
 }
@@ -1402,9 +1415,10 @@ void ContainerWidget::SelectWidget(Widget* w, SelectionCause c) {
     }
   } else {
     if (root_selectable_) {
-      g_core->Log(LogName::kBa, LogLevel::kError,
-                  "SelectWidget() called on a ContainerWidget which is itself "
-                  "selectable. Ignoring.");
+      g_core->logging->Log(
+          LogName::kBa, LogLevel::kError,
+          "SelectWidget() called on a ContainerWidget which is itself "
+          "selectable. Ignoring.");
       return;
     }
     for (auto& widget : widgets_) {
@@ -1429,9 +1443,9 @@ void ContainerWidget::SelectWidget(Widget* w, SelectionCause c) {
         } else {
           static bool printed = false;
           if (!printed) {
-            g_core->Log(LogName::kBa, LogLevel::kWarning,
-                        "SelectWidget called on unselectable widget: "
-                            + w->GetWidgetTypeName());
+            g_core->logging->Log(LogName::kBa, LogLevel::kWarning,
+                                 "SelectWidget called on unselectable widget: "
+                                     + w->GetWidgetTypeName());
             Python::PrintStackTrace();
             printed = true;
           }
@@ -1634,8 +1648,8 @@ void ContainerWidget::SelectDownWidget() {
     }
     if (w) {
       if (!w->IsSelectable()) {
-        g_core->Log(LogName::kBa, LogLevel::kError,
-                    "Down_widget is not selectable.");
+        g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                             "Down_widget is not selectable.");
       } else {
         w->Show();
         // Avoid tap sounds and whatnot if we're just re-selecting ourself.
@@ -1700,8 +1714,8 @@ void ContainerWidget::SelectUpWidget() {
     }
     if (w) {
       if (!w->IsSelectable()) {
-        g_core->Log(LogName::kBa, LogLevel::kError,
-                    "up_widget is not selectable.");
+        g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                             "up_widget is not selectable.");
       } else {
         w->Show();
         // Avoid tap sounds and whatnot if we're just re-selecting ourself.
@@ -1754,8 +1768,8 @@ void ContainerWidget::SelectLeftWidget() {
     }
     if (w) {
       if (!w->IsSelectable()) {
-        g_core->Log(LogName::kBa, LogLevel::kError,
-                    "left_widget is not selectable.");
+        g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                             "left_widget is not selectable.");
       } else {
         w->Show();
         // Avoid tap sounds and whatnot if we're just re-selecting ourself.
@@ -1808,8 +1822,8 @@ void ContainerWidget::SelectRightWidget() {
     }
     if (w) {
       if (!w->IsSelectable()) {
-        g_core->Log(LogName::kBa, LogLevel::kError,
-                    "right_widget is not selectable.");
+        g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                             "right_widget is not selectable.");
       } else {
         w->Show();
         // Avoid tap sounds and whatnot if we're just re-selecting ourself.
@@ -1925,7 +1939,7 @@ void ContainerWidget::PrintExitListInstructions(
         Utils::StringReplaceOne(
             &s, "${RIGHT}", g_base->assets->CharStr(SpecialChar::kRightArrow));
       }
-      ScreenMessage(s);
+      g_base->ScreenMessage(s);
     }
   }
 }

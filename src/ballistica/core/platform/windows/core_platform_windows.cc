@@ -1,6 +1,6 @@
 // Released under the MIT License. See LICENSE for details.
 
-#if BA_OSTYPE_WINDOWS
+#if BA_PLATFORM_WINDOWS
 #include "ballistica/core/platform/windows/core_platform_windows.h"
 
 #include <direct.h>
@@ -13,7 +13,9 @@
 #include <sysinfoapi.h>
 
 /* clang-format off */
-// Builds fail if this is further up.
+// Builds fail if this is further up, so we need to disable clang-format to
+// keep that from happening.
+//
 // This define gives us the unicode version.
 #define DBGHELP_TRANSLATE_TCHAR
 #include <dbghelp.h>
@@ -28,9 +30,9 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
 #if BA_DEBUG_BUILD
-#pragma comment(lib, "python312_d.lib")
+#pragma comment(lib, "python313_d.lib")
 #else
-#pragma comment(lib, "python312.lib")
+#pragma comment(lib, "python313.lib")
 #endif
 #pragma comment(lib, "DbgHelp.lib")
 
@@ -44,6 +46,8 @@
 #pragma comment(lib, "SDL2main.lib")
 #endif
 
+#include "ballistica/core/core.h"
+#include "ballistica/core/logging/logging.h"
 #include "ballistica/shared/foundation/event_loop.h"
 #include "ballistica/shared/generic/native_stack_trace.h"
 #include "ballistica/shared/generic/utils.h"
@@ -264,23 +268,6 @@ auto CorePlatformWindows::GetDeviceUUIDInputs() -> std::list<std::string> {
   return out;
 }
 
-std::string CorePlatformWindows::GenerateUUID() {
-  std::string val;
-  UUID uuid;
-  ZeroMemory(&uuid, sizeof(UUID));
-  UuidCreate(&uuid);
-  RPC_CSTR str_a;
-  UuidToStringA(&uuid, &str_a);
-  if (str_a != nullptr) {
-    val = reinterpret_cast<char*>(str_a);
-    RpcStringFreeA(&str_a);
-  } else {
-    // As a fallback, get processor cycles since boot.
-    val = std::to_string(__rdtsc());
-  }
-  return val;
-}
-
 auto CorePlatformWindows::DoGetConfigDirectoryMonolithicDefault()
     -> std::optional<std::string> {
   std::string config_dir;
@@ -391,11 +378,11 @@ void CorePlatformWindows::DoMakeDir(const std::string& dir, bool quiet) {
   }
 }
 
-std::string CorePlatformWindows::GetLocale() {
+std::string CorePlatformWindows::GetLocaleTag() {
   // Get the windows locale.
   // (see http://msdn.microsoft.com/en-us/goglobal/bb895996.aspx)
   // theres a func to convert this to a string but its not available on xp
-  // the standard is lang_COUNTRY I think..
+  // the standard is lang_COUNTRY I think.
   // languages: http://www.loc.gov/standards/iso639-2/php/code_list.php
   // country codes:  http://www.iso.org/iso/prods-services/iso3166ma
   //   /02iso-3166-code-lists/country_names_and_code_elements
@@ -621,6 +608,9 @@ std::string CorePlatformWindows::GetLocale() {
     case 9226:
       return "es_CO";
       break;  // Spanish - Colombia
+    case 16393:
+      return "en_IN";
+      break;  // English - India
     case 3081:
       return "en_AU";
       break;  // English - Australia
@@ -811,6 +801,8 @@ std::string CorePlatformWindows::GetLocale() {
       return "hu_HU";
       break;  // Hungarian
     default:
+      // This will fail to resolve to a Locale but it should generate a
+      // warning so we know to fix it.
       return "lcid_" + std::to_string(lcid);
   }
 }
@@ -854,12 +846,7 @@ bool CorePlatformWindows::DoHasTouchScreen() { return false; }
 void CorePlatformWindows::EmitPlatformLog(const std::string& name,
                                           LogLevel level,
                                           const std::string& msg) {
-  // if (have_stdin_stdout_) {
-  //   // On headless builds we use default handler (simple stdout).
-  //   return CorePlatform::EmitPlatformLog(msg);
-  // }
-
-  // Also spit this out as a debug-string for when running from msvc.
+  // Spit this out as a debug-string for when running from msvc.
   OutputDebugString(UTF8Decode(msg).c_str());
 }
 
@@ -915,12 +902,12 @@ auto CorePlatformWindows::GetEnv(const std::string& name)
   std::vector<wchar_t> big_buffer(result);
   assert(big_buffer.size() == result);
   result = GetEnvironmentVariableW(UTF8Decode(name).c_str(), big_buffer.data(),
-                                   big_buffer.size());
+                                   static_cast<DWORD>(big_buffer.size()));
 
   // This should always succeed at this point; make noise if not.
   if (result == 0 || result > big_buffer.size()) {
-    g_core->Log(LogName::kBa, LogLevel::kError,
-                "GetEnv to allocated buffer failed; unexpected.");
+    g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                         "GetEnv to allocated buffer failed; unexpected.");
     return {};
   }
   return UTF8Encode(big_buffer.data());
@@ -998,15 +985,15 @@ std::vector<uint32_t> CorePlatformWindows::GetBroadcastAddrs() {
       pIPAddrTable = static_cast<MIB_IPADDRTABLE*>(MALLOC(dwSize));
     }
     if (pIPAddrTable == nullptr) {
-      g_core->Log(LogName::kBa, LogLevel::kError,
-                  "Memory allocation failed for GetIpAddrTable\n");
+      g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                           "Memory allocation failed for GetIpAddrTable\n");
       err = true;
     }
 
     if (!err) {
       // Make a second call to GetIpAddrTable to get the actual data we want
       if ((dwRetVal = GetIpAddrTable(pIPAddrTable, &dwSize, 0)) != NO_ERROR) {
-        g_core->Log(
+        g_core->logging->Log(
             LogName::kBa, LogLevel::kError,
             "GetIpAddrTable failed with error " + std::to_string(dwRetVal));
         err = true;
@@ -1043,18 +1030,18 @@ bool CorePlatformWindows::SetSocketNonBlocking(int sd) {
   unsigned long dataval = 1;  // NOLINT (func signature wants long)
   int result = ioctlsocket(sd, FIONBIO, &dataval);
   if (result != 0) {
-    g_core->Log(LogName::kBa, LogLevel::kError,
-                "Error setting non-blocking socket: "
-                    + g_core->platform->GetSocketErrorString());
+    g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                         "Error setting non-blocking socket: "
+                             + g_core->platform->GetSocketErrorString());
     return false;
   }
   return true;
 }
 
-std::string CorePlatformWindows::GetPlatformName() { return "windows"; }
+std::string CorePlatformWindows::GetLegacyPlatformName() { return "windows"; }
 
-std::string CorePlatformWindows::GetSubplatformName() {
-#if BA_TEST_BUILD
+std::string CorePlatformWindows::GetLegacySubplatformName() {
+#if BA_VARIANT_TEST_BUILD
   return "test";
 #else
   return "";
@@ -1063,4 +1050,4 @@ std::string CorePlatformWindows::GetSubplatformName() {
 
 }  // namespace ballistica::core
 
-#endif  // BA_OSTYPE_WINDOWS
+#endif  // BA_PLATFORM_WINDOWS

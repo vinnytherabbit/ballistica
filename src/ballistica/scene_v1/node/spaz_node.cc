@@ -27,6 +27,7 @@
 #include "ballistica/scene_v1/dynamics/dynamics.h"
 #include "ballistica/scene_v1/node/node_attribute.h"
 #include "ballistica/scene_v1/node/node_type.h"
+#include "ballistica/scene_v1/support/scene.h"
 #include "ballistica/shared/generic/utils.h"
 #include "ballistica/shared/math/random.h"
 #include "ode/ode_collision_util.h"
@@ -1797,7 +1798,7 @@ void SpazNode::DoFlyPress() {
 
     // Keep from doing too many sparkles.
     static millisecs_t last_sparkle_time = 0;
-    millisecs_t t = g_core->GetAppTimeMillisecs();
+    millisecs_t t = g_core->AppTimeMillisecs();
     if (t - last_sparkle_time > 200) {
       last_sparkle_time = t;
       auto* s = g_base->audio->SourceBeginNew();
@@ -4518,7 +4519,7 @@ void SpazNode::Draw(base::FrameDef* frame_def) {
     UpdateForGraphicsQuality(graphics_quality_);
   }
 
-#if BA_OSTYPE_MACOS
+#if BA_PLATFORM_MACOS
   if (g_base->graphics_server->renderer()->debug_draw_mode()) {
     base::SimpleComponent c(frame_def->overlay_3d_pass());
     c.SetTransparent(true);
@@ -4643,7 +4644,7 @@ void SpazNode::Draw(base::FrameDef* frame_def) {
 
     c.Submit();
   }
-#endif  // BA_OSTYPE_MACOS
+#endif  // BA_PLATFORM_MACOS
 
   millisecs_t scenetime = scene()->time();
   int64_t render_frame_count = frame_def->frame_number_filtered();
@@ -4974,8 +4975,9 @@ void SpazNode::Draw(base::FrameDef* frame_def) {
 
       int elem_count = name_text_group_.GetElementCount();
       float s_extra =
-          (g_core->vr_mode() || g_base->ui->scale() == UIScale::kSmall) ? 1.2f
-                                                                        : 1.0f;
+          (g_core->vr_mode() || g_base->ui->uiscale() == UIScale::kSmall)
+              ? 1.2f
+              : 1.0f;
 
       for (int e = 0; e < elem_count; e++) {
         // Gracefully skip unloaded textures.
@@ -5977,8 +5979,9 @@ auto SpazNode::GetRigidBody(int id) -> RigidBody* {
       return hair_ponytail_bottom_body_.get();
       break;
     default:
-      g_core->Log(LogName::kBa, LogLevel::kError,
-                  "Request for unknown spaz body: " + std::to_string(id));
+      g_core->logging->Log(
+          LogName::kBa, LogLevel::kError,
+          "Request for unknown spaz body: " + std::to_string(id));
       break;
   }
 
@@ -6698,30 +6701,31 @@ void SpazNode::SetHoldNode(Node* val) {
         assert(dynamics);
         Collision* c = dynamics->active_collision();
         if (c) {
-          g_core->Log(
+          g_core->logging->Log(
               LogName::kBa, LogLevel::kError,
               "SRC NODE: " + ObjToString(dynamics->GetActiveCollideSrcNode()));
-          g_core->Log(
+          g_core->logging->Log(
               LogName::kBa, LogLevel::kError,
               "OPP NODE: " + ObjToString(dynamics->GetActiveCollideDstNode()));
-          g_core->Log(
+          g_core->logging->Log(
               LogName::kBa, LogLevel::kError,
               "SRC BODY "
                   + std::to_string(dynamics->GetCollideMessageReverseOrder()
                                        ? c->body_id_1
                                        : c->body_id_2));
-          g_core->Log(
+          g_core->logging->Log(
               LogName::kBa, LogLevel::kError,
               "OPP BODY "
                   + std::to_string(dynamics->GetCollideMessageReverseOrder()
                                        ? c->body_id_2
                                        : c->body_id_1));
-          g_core->Log(
+          g_core->logging->Log(
               LogName::kBa, LogLevel::kError,
               "REVERSE "
                   + std::to_string(dynamics->GetCollideMessageReverseOrder()));
         } else {
-          g_core->Log(LogName::kBa, LogLevel::kError, "<NO ACTIVE COLLISION>");
+          g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                               "<NO ACTIVE COLLISION>");
         }
       }
       throw Exception("specified hold_body (" + std::to_string(hold_body_)

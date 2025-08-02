@@ -73,11 +73,11 @@ class SpinoffContext:
     ) -> None:
         # pylint: disable=too-many-statements
 
-        # By default, if dst files have their modtimes changed but
-        # still line up with src files, we can recover. But one may
-        # choose to error in that case to track down things mucking
-        # with dst files when they shouldn't be.
-        self.strict = False
+        #: By default, if dst files have their modtimes changed but
+        #: still line up with src files, we can recover. But one may
+        #: choose to error in that case to track down things mucking
+        #: with dst files when they shouldn't be.
+        self.strict: bool = False
 
         self._mode = mode
         self._force = force
@@ -962,9 +962,9 @@ class SpinoffContext:
                 # Remove downloads of prebuilt plus lib for win builds.
                 text = replace_exact(
                     text,
-                    '   build/prefab/lib/windows/Debug_Win32/'
+                    '   build/prefab/lib/windows/Debug_$(WINPREVSP)/'
                     'BallisticaKitGenericPlus.lib \\\n'
-                    '   build/prefab/lib/windows/Debug_Win32/'
+                    '   build/prefab/lib/windows/Debug_$(WINPREVSP)/'
                     'BallisticaKitGenericPlus.pdb\n',
                     '',
                     count=2,
@@ -972,9 +972,9 @@ class SpinoffContext:
                 )
                 text = replace_exact(
                     text,
-                    '   build/prefab/lib/windows/Release_Win32/'
+                    '   build/prefab/lib/windows/Release_$(WINPREVSP)/'
                     'BallisticaKitGenericPlus.lib \\\n'
-                    '   build/prefab/lib/windows/Release_Win32/'
+                    '   build/prefab/lib/windows/Release_$(WINPREVSP)/'
                     'BallisticaKitGenericPlus.pdb\n',
                     '',
                     count=2,

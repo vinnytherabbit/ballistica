@@ -4,17 +4,21 @@
 
 #include <Python.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
 #include "ballistica/base/assets/assets.h"
 #include "ballistica/base/audio/audio.h"
 #include "ballistica/base/input/device/input_device.h"
+#include "ballistica/base/input/input.h"
 #include "ballistica/base/networking/networking.h"
 #include "ballistica/base/platform/base_platform.h"
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/base/support/plus_soft.h"
 #include "ballistica/classic/support/classic_app_mode.h"
+#include "ballistica/core/logging/logging.h"
+#include "ballistica/core/logging/logging_macros.h"
 #include "ballistica/core/python/core_python.h"
 #include "ballistica/scene_v1/support/client_session_net.h"
 #include "ballistica/scene_v1/support/scene_v1_input_device_delegate.h"
@@ -48,17 +52,18 @@ ConnectionToHost::~ConnectionToHost() {
         s = g_base->assets->GetResourceString("leftPartyText");
         Utils::StringReplaceOne(&s, "${NAME}", peer_spec().GetDisplayString());
       }
-      ScreenMessage(s, {1, 0.5f, 0.0f});
+      g_base->ScreenMessage(s, {1, 0.5f, 0.0f});
       g_base->audio->SafePlaySysSound(base::SysSoundID::kCorkPop);
     } else {
-      ScreenMessage(g_base->assets->GetResourceString("connectionRejectedText"),
-                    {1, 0, 0});
+      g_base->ScreenMessage(
+          g_base->assets->GetResourceString("connectionRejectedText"),
+          {1, 0, 0});
     }
   }
 }
 
 void ConnectionToHost::Update() {
-  millisecs_t real_time = g_core->GetAppTimeMillisecs();
+  millisecs_t real_time = g_core->AppTimeMillisecs();
 
   // Send out null messages occasionally for ping measurement purposes.
   // Note that we currently only do this from the client since we might not
@@ -172,18 +177,19 @@ void ConnectionToHost::HandleGamePacket(const std::vector<uint8_t>& data) {
           std::vector<char> string_buffer(data.size() - 3 + 1);
           memcpy(&(string_buffer[0]), &(data[3]), data.size() - 3);
           string_buffer[string_buffer.size() - 1] = 0;
-          cJSON* handshake = cJSON_Parse(string_buffer.data());
-          if (handshake) {
-            // We hash this to prove that we're us; keep it around.
-            peer_hash_input_ = "";
-            cJSON* pspec = cJSON_GetObjectItem(handshake, "s");
-            if (pspec) {
-              peer_hash_input_ += pspec->valuestring;
-              set_peer_spec(PlayerSpec(pspec->valuestring));
-            }
-            cJSON* salt = cJSON_GetObjectItem(handshake, "l");
-            if (salt) {
-              peer_hash_input_ += salt->valuestring;
+          if (cJSON* handshake = cJSON_Parse(string_buffer.data())) {
+            if (cJSON_IsObject(handshake)) {
+              // We hash this to prove that we're us; keep it around.
+              peer_hash_input_ = "";
+              cJSON* pspec = cJSON_GetObjectItem(handshake, "s");
+              if (cJSON_IsString(pspec)) {
+                peer_hash_input_ += pspec->valuestring;
+                set_peer_spec(PlayerSpec(pspec->valuestring));
+              }
+              cJSON* salt = cJSON_GetObjectItem(handshake, "l");
+              if (cJSON_IsString(salt)) {
+                peer_hash_input_ += salt->valuestring;
+              }
             }
             cJSON_Delete(handshake);
           }
@@ -202,7 +208,7 @@ void ConnectionToHost::HandleGamePacket(const std::vector<uint8_t>& data) {
           set_peer_spec(PlayerSpec(string_buffer.data()));
         }
 
-        peer_hash_ = g_base->plus()->CalcV1PeerHash(peer_hash_input_);
+        peer_hash_ = g_base->Plus()->CalcV1PeerHash(peer_hash_input_);
 
         set_can_communicate(true);
         appmode->LaunchClientSession();
@@ -227,7 +233,7 @@ void ConnectionToHost::HandleGamePacket(const std::vector<uint8_t>& data) {
           JsonDict dict;
           dict.AddNumber("b", kEngineBuildNumber);
 
-          g_base->plus()->V1SetClientInfo(&dict);
+          g_base->Plus()->V1SetClientInfo(&dict);
 
           // Pass the hash we generated from their handshake; they can use
           // this to make sure we're who we say we are.
@@ -250,8 +256,9 @@ void ConnectionToHost::HandleGamePacket(const std::vector<uint8_t>& data) {
               g_base->python->GetRawConfigValue("Player Profiles");
           PythonRef empty_dict;
           if (!profiles) {
-            g_core->Log(LogName::kBaNetworking, LogLevel::kError,
-                        "No profiles found; sending empty list to host");
+            g_core->logging->Log(
+                LogName::kBaNetworking, LogLevel::kError,
+                "No profiles found; sending empty list to host");
             empty_dict.Steal(PyDict_New());
             profiles = empty_dict.get();
           }
@@ -265,8 +272,8 @@ void ConnectionToHost::HandleGamePacket(const std::vector<uint8_t>& data) {
                     .Get(core::CorePython::ObjID::kJsonDumpsCall)
                     .Call(args, keywds);
             if (!results.exists()) {
-              g_core->Log(LogName::kBaNetworking, LogLevel::kError,
-                          "Error getting json dump of local profiles");
+              g_core->logging->Log(LogName::kBaNetworking, LogLevel::kError,
+                                   "Error getting json dump of local profiles");
             } else {
               try {
                 // Pull the string as utf8 and send.
@@ -276,7 +283,7 @@ void ConnectionToHost::HandleGamePacket(const std::vector<uint8_t>& data) {
                 memcpy(&(msg[1]), &s[0], s.size());
                 SendReliableMessage(msg);
               } catch (const std::exception& e) {
-                g_core->Log(
+                g_core->logging->Log(
                     LogName::kBaNetworking, LogLevel::kError,
                     std::string("Error sending player profiles to host: ")
                         + e.what());
@@ -284,8 +291,9 @@ void ConnectionToHost::HandleGamePacket(const std::vector<uint8_t>& data) {
             }
           }
         } else {
-          g_core->Log(LogName::kBaNetworking, LogLevel::kError,
-                      "Connected to old protocol; can't send player profiles");
+          g_core->logging->Log(
+              LogName::kBaNetworking, LogLevel::kError,
+              "Connected to old protocol; can't send player profiles");
         }
       }
       break;
@@ -312,8 +320,8 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
   assert(g_base->InLogicThread());
 
   if (buffer.empty()) {
-    g_core->Log(LogName::kBaNetworking, LogLevel::kError,
-                "Got invalid HandleMessagePacket");
+    g_core->logging->Log(LogName::kBaNetworking, LogLevel::kError,
+                         "Got invalid HandleMessagePacket");
     return;
   }
 
@@ -328,27 +336,29 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
     case BA_MESSAGE_HOST_INFO: {
       if (buffer.size() > 1) {
         std::vector<char> str_buffer(buffer.size());
-        memcpy(&(str_buffer[0]), &(buffer[1]), buffer.size() - 1);
-        str_buffer[str_buffer.size() - 1] = 0;
-        cJSON* info = cJSON_Parse(reinterpret_cast<const char*>(&(buffer[1])));
-        if (info) {
-          // Build number.
-          cJSON* b = cJSON_GetObjectItem(info, "b");
-          if (b) {
-            build_number_ = b->valueint;
-          } else {
-            g_core->Log(LogName::kBaNetworking, LogLevel::kError,
-                        "no buildnumber in hostinfo msg");
-          }
-          // Party name.
-          cJSON* n = cJSON_GetObjectItem(info, "n");
-          if (n != nullptr) {
-            party_name_ = Utils::GetValidUTF8(n->valuestring, "bsmhi");
+        std::copy(buffer.begin() + 1, buffer.end(), str_buffer.begin());
+        str_buffer.back() = 0;  // Ensure null termination
+        if (cJSON* info = cJSON_Parse(str_buffer.data())) {
+          if (cJSON_IsObject(info)) {
+            // Build number.
+            cJSON* b = cJSON_GetObjectItem(info, "b");
+            if (cJSON_IsNumber(b)) {
+              build_number_ = b->valueint;
+            } else {
+              BA_LOG_ONCE(LogName::kBaNetworking, LogLevel::kError,
+                          "No buildnumber in hostinfo msg.");
+            }
+            // Party name.
+            cJSON* n = cJSON_GetObjectItem(info, "n");
+            if (cJSON_IsString(n)) {
+              party_name_ = Utils::GetValidUTF8(n->valuestring, "bsmhi");
+            }
           }
           cJSON_Delete(info);
         } else {
-          g_core->Log(LogName::kBaNetworking, LogLevel::kError,
-                      "got invalid json in hostinfo message");
+          BA_LOG_ONCE(LogName::kBaNetworking, LogLevel::kWarning,
+                      "Got invalid json in hostinfo message: "
+                          + std::string(str_buffer.data()) + ".");
         }
       }
       got_host_info_ = true;
@@ -360,7 +370,16 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
         // Expand this into a json object; if it's valid, replace the game's
         // current roster with it.
         cJSON* new_roster =
-            cJSON_Parse(reinterpret_cast<const char*>(&(buffer[1])));
+            cJSON_Parse(reinterpret_cast<const char*>(buffer.data()) + 1);
+
+        // Watch for invalid data.
+        if (new_roster && !cJSON_IsArray(new_roster)) {
+          cJSON_Delete(new_roster);
+          new_roster = nullptr;
+          BA_LOG_ONCE(LogName::kBaNetworking, LogLevel::kWarning,
+                      "Got invalid json in hostinfo message.");
+        }
+
         if (new_roster) {
           if (auto* appmode = classic::ClassicAppMode::GetActive()) {
             appmode->SetGameRoster(new_roster);
@@ -374,34 +393,39 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
       // High level json messages (nice and easy to expand on but not
       // especially efficient).
       if (buffer.size() >= 3 && buffer[buffer.size() - 1] == 0) {
-        cJSON* msg =
-            cJSON_Parse(reinterpret_cast<const char*>(buffer.data() + 1));
-        if (msg) {
-          cJSON* type = cJSON_GetObjectItem(msg, "t");
-          if (type != nullptr) {
-            switch (type->valueint) {
-              case BA_JMESSAGE_SCREEN_MESSAGE: {
-                std::string m;
-                float r = 1.0f;
-                float g = 1.0f;
-                float b = 1.0f;
-                if (cJSON* r_obj = cJSON_GetObjectItem(msg, "r")) {
-                  r = static_cast<float>(r_obj->valuedouble);
+        if (cJSON* msg =
+                cJSON_Parse(reinterpret_cast<const char*>(buffer.data() + 1))) {
+          if (cJSON_IsObject(msg)) {
+            cJSON* type = cJSON_GetObjectItem(msg, "t");
+            if (cJSON_IsNumber(type)) {
+              switch (type->valueint) {
+                case BA_JMESSAGE_SCREEN_MESSAGE: {
+                  std::string m;
+                  float r{1.0f};
+                  float g{1.0f};
+                  float b{1.0f};
+                  cJSON* r_obj = cJSON_GetObjectItem(msg, "r");
+                  cJSON* g_obj = cJSON_GetObjectItem(msg, "g");
+                  cJSON* b_obj = cJSON_GetObjectItem(msg, "b");
+                  cJSON* m_obj = cJSON_GetObjectItem(msg, "m");
+                  if (cJSON_IsNumber(r_obj)) {
+                    r = static_cast<float>(r_obj->valuedouble);
+                  }
+                  if (cJSON_IsNumber(g_obj)) {
+                    g = static_cast<float>(g_obj->valuedouble);
+                  }
+                  if (cJSON_IsNumber(b_obj)) {
+                    b = static_cast<float>(b_obj->valuedouble);
+                  }
+                  if (cJSON_IsString(m_obj)) {
+                    m = m_obj->valuestring;
+                    g_base->ScreenMessage(m, {r, g, b});
+                  }
+                  break;
                 }
-                if (cJSON* g_obj = cJSON_GetObjectItem(msg, "g")) {
-                  g = static_cast<float>(g_obj->valuedouble);
-                }
-                if (cJSON* b_obj = cJSON_GetObjectItem(msg, "b")) {
-                  b = static_cast<float>(b_obj->valuedouble);
-                }
-                if (cJSON* m_obj = cJSON_GetObjectItem(msg, "m")) {
-                  m = m_obj->valuestring;
-                  ScreenMessage(m, {r, g, b});
-                }
-                break;
+                default:
+                  break;
               }
-              default:
-                break;
             }
           }
           cJSON_Delete(msg);
@@ -419,7 +443,7 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
             g_base->assets->GetResourceString("playerJoinedPartyText");
         Utils::StringReplaceOne(
             &s, "${NAME}", PlayerSpec(str_buffer.data()).GetDisplayString());
-        ScreenMessage(s, {0.5f, 1.0f, 0.5f});
+        g_base->ScreenMessage(s, {0.5f, 1.0f, 0.5f});
         g_base->audio->SafePlaySysSound(base::SysSoundID::kGunCock);
       }
       break;
@@ -435,7 +459,7 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
             g_base->assets->GetResourceString("playerLeftPartyText");
         Utils::StringReplaceOne(
             &s, "${NAME}", PlayerSpec(&(str_buffer[0])).GetDisplayString());
-        ScreenMessage(s, {1, 0.5f, 0.0f});
+        g_base->ScreenMessage(s, {1, 0.5f, 0.0f});
         g_base->audio->SafePlaySysSound(base::SysSoundID::kCorkPop);
       }
       break;
@@ -444,8 +468,8 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
     case BA_MESSAGE_ATTACH_REMOTE_PLAYER_2: {
       // New-style packet which includes a 32-bit player_id.
       if (buffer.size() != 6) {
-        g_core->Log(LogName::kBaNetworking, LogLevel::kError,
-                    "Invalid attach-remote-player-2 msg");
+        g_core->logging->Log(LogName::kBaNetworking, LogLevel::kError,
+                             "Invalid attach-remote-player-2 msg");
         break;
       }
 
@@ -462,7 +486,7 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
           delegate->AttachToRemotePlayer(this,
                                          static_cast_check_fit<int>(player_id));
         } else {
-          g_core->Log(
+          g_core->logging->Log(
               LogName::kBaNetworking, LogLevel::kError,
               "InputDevice does not have a SceneV1 delegate as expected "
               "(loc1).");
@@ -482,8 +506,8 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
         // public servers.
         // TODO(ericf): can remove this once back-compat-protocol > 29.
         if (buffer.size() != 3) {
-          g_core->Log(LogName::kBaNetworking, LogLevel::kError,
-                      "Invalid attach-remote-player msg.");
+          g_core->logging->Log(LogName::kBaNetworking, LogLevel::kError,
+                               "Invalid attach-remote-player msg.");
           break;
         }
 
@@ -497,7 +521,7 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
                   &input_device->delegate())) {
             delegate->AttachToRemotePlayer(this, buffer[2]);
           } else {
-            g_core->Log(
+            g_core->logging->Log(
                 LogName::kBaNetworking, LogLevel::kError,
                 "InputDevice does not have a SceneV1 delegate as expected "
                 "(loc2).");
@@ -516,8 +540,8 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
 
     case BA_MESSAGE_DETACH_REMOTE_PLAYER: {
       if (buffer.size() != 2) {
-        g_core->Log(LogName::kBaNetworking, LogLevel::kError,
-                    "Invalid detach-remote-player msg");
+        g_core->logging->Log(LogName::kBaNetworking, LogLevel::kError,
+                             "Invalid detach-remote-player msg");
         break;
       }
       // Server is telling us that our local input device is no longer
@@ -541,7 +565,7 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
             // be cleared out at this point. Just complain if that's not
             // the case.
             if (connection_to_host != nullptr) {
-              g_core->Log(
+              g_core->logging->Log(
                   LogName::kBaNetworking, LogLevel::kError,
                   "InputDevice does not have a SceneV1 delegate as expected "
                   "(loc3).");
@@ -581,7 +605,7 @@ void ConnectionToHost::HandleMessagePacket(const std::vector<uint8_t>& buffer) {
       s = g_base->assets->GetResourceString("connectedToPartyText");
       Utils::StringReplaceOne(&s, "${NAME}", peer_spec().GetDisplayString());
     }
-    ScreenMessage(s, {0.5f, 1, 0.5f});
+    g_base->ScreenMessage(s, {0.5f, 1, 0.5f});
     g_base->audio->SafePlaySysSound(base::SysSoundID::kGunCock);
 
     printed_connect_message_ = true;

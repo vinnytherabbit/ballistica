@@ -5,11 +5,12 @@
 #include <string>
 
 #include "ballistica/base/audio/audio.h"
-#include "ballistica/base/input/device/keyboard_input.h"  // IWYU pragma: keep.
+#include "ballistica/base/input/device/keyboard_input.h"
 #include "ballistica/base/input/input.h"
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/base/python/support/python_context_call.h"
 #include "ballistica/base/ui/dev_console.h"
+#include "ballistica/base/ui/ui.h"
 #include "ballistica/shared/python/python_command.h"  // IWYU pragma: keep.
 #include "ballistica/shared/python/python_module_builder.h"
 #include "ballistica/ui_v1/python/class/python_class_ui_mesh.h"
@@ -78,26 +79,8 @@ void UIV1Python::ShowURL(const std::string& url) {
     PythonRef args(Py_BuildValue("(s)", url.c_str()), PythonRef::kSteal);
     objs().Get(ObjID::kShowURLWindowCall).Call(args);
   } else {
-    g_core->Log(LogName::kBa, LogLevel::kError,
-                "ShowURLWindowCall nonexistent.");
-  }
-}
-
-void UIV1Python::HandleDeviceMenuPress(base::InputDevice* device) {
-  assert(objs().Exists(ObjID::kDeviceMenuPressCall));
-
-  // Ignore if input is locked or we've not yet got a root widget.
-  if (g_base->input->IsInputLocked() || g_ui_v1 == nullptr
-      || g_ui_v1->root_widget() == nullptr) {
-    return;
-  }
-  base::ScopedSetContext ssc(nullptr);
-  PythonRef args(device ? Py_BuildValue("(i)", device->index())
-                        : Py_BuildValue("(O)", Py_None),
-                 PythonRef::kSteal);
-  {
-    Python::ScopedCallLabel label("handleDeviceMenuPress");
-    objs().Get(ObjID::kDeviceMenuPressCall).Call(args);
+    g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                         "ShowURLWindowCall nonexistent.");
   }
 }
 
@@ -120,7 +103,7 @@ void UIV1Python::InvokeStringEditor(PyObject* string_edit_adapter_instance) {
     context_call->ScheduleInUIOperation(args);
   } else {
     // Otherwise just run immediately.
-    g_core->Log(
+    g_core->logging->Log(
         LogName::kBa, LogLevel::kWarning,
         "UIV1Python::InvokeStringEditor running outside of UIInteraction; "
         "unexpected.");
@@ -145,9 +128,9 @@ void UIV1Python::InvokeQuitWindow(QuitType quit_type) {
   objs().Get(UIV1Python::ObjID::kQuitWindowCall).Call(args);
 
   // If we have a keyboard, give it UI ownership.
-  base::InputDevice* keyboard = g_base->input->keyboard_input();
+  base::KeyboardInput* keyboard = g_base->input->keyboard_input();
   if (keyboard) {
-    g_base->ui->SetUIInputDevice(keyboard);
+    g_base->ui->SetMainUIInputDevice(keyboard);
   }
 }
 

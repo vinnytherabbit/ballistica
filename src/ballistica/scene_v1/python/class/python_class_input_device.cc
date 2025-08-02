@@ -24,12 +24,10 @@ auto PythonClassInputDevice::type_name() -> const char* {
 void PythonClassInputDevice::SetupType(PyTypeObject* cls) {
   PythonClass::SetupType(cls);
   // Fully qualified type path we will be exposed as:
-  cls->tp_name = "babase.InputDevice";
+  cls->tp_name = "bascenev1.InputDevice";
   cls->tp_basicsize = sizeof(PythonClassInputDevice);
   cls->tp_doc =
       "An input-device such as a gamepad, touchscreen, or keyboard.\n"
-      "\n"
-      "Category: **Gameplay Classes**\n"
       "\n"
       "Attributes:\n"
       "\n"
@@ -103,7 +101,7 @@ auto PythonClassInputDevice::Create(SceneV1InputDeviceDelegate* input_device)
   auto* py_input_device = reinterpret_cast<PythonClassInputDevice*>(
       PyObject_CallObject(reinterpret_cast<PyObject*>(&type_obj), nullptr));
   if (!py_input_device) {
-    throw Exception("babase.InputDevice creation failed.");
+    throw Exception("bascenev1.InputDevice creation failed.");
   }
   *py_input_device->input_device_delegate_ = input_device;
   return reinterpret_cast<PyObject*>(py_input_device);
@@ -149,7 +147,7 @@ auto PythonClassInputDevice::tp_new(PyTypeObject* type, PyObject* args,
     throw Exception(
         "ERROR: " + std::string(type_obj.tp_name)
         + " objects must only be created in the logic thread (current is ("
-        + CurrentThreadName() + ").");
+        + g_core->CurrentThreadName() + ").");
   }
   self->input_device_delegate_ =
       new Object::WeakRef<SceneV1InputDeviceDelegate>();
@@ -249,7 +247,7 @@ auto PythonClassInputDevice::tp_getattro(PythonClassInputDevice* self,
     if (!d) {
       throw Exception(PyExcType::kInputDeviceNotFound);
     }
-    return PyLong_FromLong(d->input_device().device_number());
+    return PyLong_FromLong(d->input_device().number());
   } else if (!strcmp(s, "is_controller_app")) {
     auto* d = self->input_device_delegate_->get();
     if (!d) {
@@ -439,8 +437,9 @@ auto PythonClassInputDevice::GetButtonName(PythonClassInputDevice* self,
                           .Get(base::BasePython::ObjID::kLstrFromJsonCall)
                           .Call(args2);
   if (!results.exists()) {
-    g_core->Log(LogName::kBa, LogLevel::kError,
-                "Error creating Lstr from raw button name: '" + bname + "'");
+    g_core->logging->Log(
+        LogName::kBa, LogLevel::kError,
+        "Error creating Lstr from raw button name: '" + bname + "'");
     PythonRef args3(Py_BuildValue("(s)", "?"), PythonRef::kSteal);
     results = g_base->python->objs()
                   .Get(base::BasePython::ObjID::kLstrFromJsonCall)

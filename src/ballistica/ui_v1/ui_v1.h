@@ -83,22 +83,21 @@ class UIV1FeatureSet : public FeatureSetNativeComponent,
   /// Called when our associated Python module is instantiated.
   static void OnModuleExec(PyObject* module);
 
-  void DoHandleDeviceMenuPress(base::InputDevice* device) override;
   void DoShowURL(const std::string& url) override;
-  auto MainMenuVisible() -> bool override;
-  auto PartyIconVisible() -> bool override;
+  auto IsMainUIVisible() -> bool override;
+  auto IsPartyIconVisible() -> bool override;
   void ActivatePartyIcon() override;
   void Draw(base::FrameDef* frame_def) override;
 
   void SetSquadSizeLabel(int num) override;
-  void SetAccountState(bool signed_in, const std::string& name) override;
+  void SetAccountSignInState(bool signed_in, const std::string& name) override;
 
   UIV1Python* const python;
 
   void OnActivate() override;
   void OnDeactivate() override;
 
-  auto PartyWindowOpen() -> bool override;
+  auto IsPartyWindowOpen() -> bool override;
 
   // Return the root widget containing all windows & dialogs. Whenever this
   // contains children, the UI is considered to be in focus
@@ -121,12 +120,12 @@ class UIV1FeatureSet : public FeatureSetNativeComponent,
   void DeleteWidget(Widget* widget);
 
   void OnScreenSizeChange() override;
-  void OnScreenChange();
+  void OnUIScaleChange();
 
   void OnLanguageChange() override;
   auto GetRootWidget() -> ui_v1::Widget* override;
   auto SendWidgetMessage(const base::WidgetMessage& m) -> int override;
-  void DoApplyAppConfig() override;
+  void ApplyAppConfig() override;
 
   auto always_use_internal_on_screen_keyboard() const {
     return always_use_internal_on_screen_keyboard_;
@@ -143,11 +142,8 @@ class UIV1FeatureSet : public FeatureSetNativeComponent,
   Object::Ref<RootWidget> root_widget_;
   int ui_lock_count_{};
   int language_state_{};
-  // int party_icon_number_{};
   bool always_use_internal_on_screen_keyboard_{};
   bool party_window_open_{};
-  // bool account_signed_in_{};
-  // std::string account_name_{};
 };
 
 }  // namespace ballistica::ui_v1

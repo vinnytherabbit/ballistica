@@ -11,6 +11,7 @@
 #include "ballistica/base/graphics/component/simple_component.h"
 #include "ballistica/base/python/support/python_context_call.h"
 #include "ballistica/base/support/app_timer.h"
+#include "ballistica/base/ui/ui.h"
 #include "ballistica/shared/generic/utils.h"
 
 namespace ballistica::ui_v1 {
@@ -131,7 +132,7 @@ void ButtonWidget::Draw(base::RenderPass* pass, bool draw_transparent) {
   assert(g_base->input);
   bool show_icons = false;
 
-  auto* device = g_base->ui->GetUIInputDevice();
+  auto* device = g_base->ui->GetMainUIInputDevice();
 
   // If there's an explicit user-set icon we always show.
   if (icon_.exists()) {
@@ -509,10 +510,12 @@ auto ButtonWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
         return false;
       }
     }
-    case base::WidgetMessage::Type::kMouseUp: {
+    case base::WidgetMessage::Type::kMouseUp:
+    case base::WidgetMessage::Type::kMouseCancel: {
       float x = m.fval1;
       float y = m.fval2;
       bool claimed = (m.fval3 > 0.0f);
+
       if (pressed_) {
         pressed_ = false;
 
@@ -526,7 +529,9 @@ auto ButtonWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
               && (x < (0 + width_ + right_overlap))
               && (y >= (0 - bottom_overlap))
               && (y < (0 + height_ + top_overlap)) && !claimed) {
-            Activate();
+            if (m.type == base::WidgetMessage::Type::kMouseUp) {
+              Activate();
+            }
           }
         }
         return true;  // Pressed buttons always claim mouse-ups.
@@ -543,8 +548,9 @@ void ButtonWidget::Activate() { DoActivate(); }
 
 void ButtonWidget::DoActivate(bool is_repeat) {
   if (!enabled_) {
-    g_core->Log(LogName::kBa, LogLevel::kWarning,
-                "ButtonWidget::DoActivate() called on disabled button");
+    g_core->logging->Log(
+        LogName::kBa, LogLevel::kWarning,
+        "ButtonWidget::DoActivate() called on disabled button");
     return;
   }
 

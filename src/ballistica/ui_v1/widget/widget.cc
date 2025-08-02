@@ -5,7 +5,8 @@
 #include <vector>
 
 #include "ballistica/base/python/support/python_context_call.h"
-#include "ballistica/base/ui/ui.h"
+#include "ballistica/core/core.h"
+#include "ballistica/core/logging/logging_macros.h"
 #include "ballistica/ui_v1/python/class/python_class_widget.h"
 #include "ballistica/ui_v1/widget/container_widget.h"
 #include "ballistica/ui_v1/widget/root_widget.h"
@@ -166,7 +167,7 @@ auto Widget::GetDrawBrightness(millisecs_t current_time) const -> float {
 }
 
 void Widget::ScreenPointToWidget(float* x, float* y) const {
-#if BA_DEBUG_BUILD || BA_TEST_BUILD
+#if BA_DEBUG_BUILD || BA_VARIANT_TEST_BUILD
   float x_old = *x;
   float y_old = *y;
 #endif
@@ -188,18 +189,18 @@ void Widget::ScreenPointToWidget(float* x, float* y) const {
   }
 
   // Sanity test: do the reverse and make sure it comes out the same.
-#if BA_DEBUG_BUILD || BA_TEST_BUILD
+#if BA_DEBUG_BUILD || BA_VARIANT_TEST_BUILD
   float x_test = *x;
   float y_test = *y;
   WidgetPointToScreen(&x_test, &y_test);
   if (std::abs(x_test - x_old) > 0.01f || std::abs(y_test - y_old) > 0.01f) {
-    g_core->Log(LogName::kBa, LogLevel::kError,
-                "ScreenPointToWidget sanity check error: expected ("
-                    + std::to_string(x_old) + "," + std::to_string(y_old)
-                    + ") got (" + std::to_string(x_test) + ","
-                    + std::to_string(y_test) + ")");
+    g_core->logging->Log(
+        LogName::kBa, LogLevel::kError,
+        "ScreenPointToWidget sanity check error: expected ("
+            + std::to_string(x_old) + "," + std::to_string(y_old) + ") got ("
+            + std::to_string(x_test) + "," + std::to_string(y_test) + ")");
   }
-#endif  // BA_DEBUG_BUILD || BA_TEST_BUILD
+#endif  // BA_DEBUG_BUILD || BA_VARIANT_TEST_BUILD
 }
 
 auto Widget::GetPyWidget_(bool new_ref) -> PyObject* {

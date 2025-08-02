@@ -3,12 +3,14 @@
 """Functionality related to cloud functionality."""
 
 from __future__ import annotations
+
+from enum import Enum
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, override
-from enum import Enum
 
 from efro.message import Message, Response
 from efro.dataclassio import ioprepped, IOAttrs
+from bacommon.securedata import SecureDataChecker
 from bacommon.transfer import DirectoryManifest
 from bacommon.login import LoginType
 
@@ -21,6 +23,24 @@ class WebLocation(Enum):
 
     ACCOUNT_EDITOR = 'e'
     ACCOUNT_DELETE_SECTION = 'd'
+
+
+@ioprepped
+@dataclass
+class CloudVals:
+    """Engine config values provided by the master server.
+
+    Used to convey things such as debug logging.
+    """
+
+    #: Fully qualified type names we should emit extra debug logs for
+    #: when garbage-collected (for debugging ref loops).
+    gc_debug_types: Annotated[
+        list[str], IOAttrs('gct', store_default=False)
+    ] = field(default_factory=list)
+
+    #: Max number of objects of a given type to emit debug logs for.
+    gc_debug_type_limit: Annotated[int, IOAttrs('gdl', store_default=False)] = 2
 
 
 @ioprepped
@@ -303,55 +323,60 @@ class StoreQueryResponse(Response):
 
 @ioprepped
 @dataclass
-class BSPrivatePartyMessage(Message):
-    """Message asking about info we need for private-party UI."""
+class SecureDataCheckMessage(Message):
+    """Was this data signed by the master-server?."""
 
-    need_datacode: Annotated[bool, IOAttrs('d')]
+    data: Annotated[bytes, IOAttrs('d')]
+    signature: Annotated[bytes, IOAttrs('s')]
 
     @override
     @classmethod
     def get_response_types(cls) -> list[type[Response] | None]:
-        return [BSPrivatePartyResponse]
+        return [SecureDataCheckResponse]
 
 
 @ioprepped
 @dataclass
-class BSPrivatePartyResponse(Response):
-    """Here's that private party UI info you asked for, boss."""
+class SecureDataCheckResponse(Response):
+    """Here's the result of that data check, boss."""
 
-    success: Annotated[bool, IOAttrs('s')]
-    tokens: Annotated[int, IOAttrs('t')]
-    gold_pass: Annotated[bool, IOAttrs('g')]
-    datacode: Annotated[str | None, IOAttrs('d')]
+    # Whether the data signature was valid.
+    result: Annotated[bool, IOAttrs('v')]
 
 
 @ioprepped
 @dataclass
-class ClassicAccountLiveData:
-    """Account related data kept up to date live for classic app mode."""
+class SecureDataCheckerRequest(Message):
+    """Can I get a checker over here?."""
 
-    class LeagueType(Enum):
-        """Type of league we are in."""
+    @override
+    @classmethod
+    def get_response_types(cls) -> list[type[Response] | None]:
+        return [SecureDataCheckerResponse]
 
-        BRONZE = 'b'
-        SILVER = 's'
-        GOLD = 'g'
-        DIAMOND = 'd'
 
-    tickets: Annotated[int, IOAttrs('ti')]
+@ioprepped
+@dataclass
+class SecureDataCheckerResponse(Response):
+    """Here's that checker ya asked for, boss."""
 
-    tokens: Annotated[int, IOAttrs('to')]
-    gold_pass: Annotated[bool, IOAttrs('g')]
+    checker: Annotated[SecureDataChecker, IOAttrs('c')]
 
-    achievements: Annotated[int, IOAttrs('a')]
-    achievements_total: Annotated[int, IOAttrs('at')]
 
-    league_type: Annotated[LeagueType | None, IOAttrs('lt')]
-    league_num: Annotated[int | None, IOAttrs('ln')]
-    league_rank: Annotated[int | None, IOAttrs('lr')]
+@ioprepped
+@dataclass
+class CloudValsRequest(Message):
+    """Can a fella get some cloud vals around here?."""
 
-    level: Annotated[int, IOAttrs('lv')]
-    xp: Annotated[int, IOAttrs('xp')]
-    xpmax: Annotated[int, IOAttrs('xpm')]
+    @override
+    @classmethod
+    def get_response_types(cls) -> list[type[Response] | None]:
+        return [CloudValsResponse]
 
-    inbox_count: Annotated[int, IOAttrs('ibc')]
+
+@ioprepped
+@dataclass
+class CloudValsResponse(Response):
+    """Here's them cloud vals ya asked for, boss."""
+
+    vals: Annotated[CloudVals, IOAttrs('v')]

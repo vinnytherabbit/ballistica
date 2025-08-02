@@ -73,7 +73,9 @@ class AudioServer {
   class ThreadSource_;
   struct Impl_;
 
-  void OnAppStartInThread_();
+  void StartSync_();
+  void Start_();
+
   ~AudioServer();
 
   void OnThreadSuspend_();
@@ -94,41 +96,30 @@ class AudioServer {
   void Process_();
   void ProcessDeviceDisconnects_(seconds_t real_time_seconds);
 
-  /// Send a component to the audio thread to delete.
-  // void DeleteAssetComponent_(Asset* c);
-
   void UpdateTimerInterval_();
   void UpdateAvailableSources_();
   void UpdateMusicPlayState_();
   void ProcessSoundFades_();
 
-  // Some threads such as audio hold onto allocated Media-Component-Refs to keep
-  // media components alive that they need.  Media-Component-Refs, however, must
-  // be disposed of in the logic thread, so they are passed back to it through
-  // this function.
+  // Some threads such as audio hold onto allocated Media-Component-Refs to
+  // keep media components alive that they need. Media-Component-Refs,
+  // however, must be disposed of in the logic thread, so they are passed
+  // back to it through this function.
   void AddSoundRefDelete(const Object::Ref<SoundAsset>* c);
 
-  // Note: should use unique_ptr for this, but build fails on raspberry pi
-  // (gcc 8.3.0). Works on Ubuntu 9.3 so should try again later.
   std::unique_ptr<Impl_> impl_{};
-  // Impl* impl_{};
-
   EventLoop* event_loop_{};
   Timer* process_timer_{};
   float sound_volume_{1.0f};
   float sound_pitch_{1.0f};
   float music_volume_{1.0f};
   float app_active_volume_{1.0f};
-
   bool have_pending_loads_{};
   bool app_active_{true};
   bool suspended_{};
   bool shutdown_completed_{};
   bool shutting_down_{};
   bool shipped_reconnect_logs_{};
-  // bool report_reset_results_{};
-  // int reset_result_reports_remaining_{3};
-  // int reconnect_fail_count_{};
   int al_source_count_{};
   seconds_t last_connected_time_{};
   seconds_t last_reset_attempt_time_{-999.0};
@@ -154,8 +145,8 @@ class AudioServer {
   // forward-declared template params with them.
   std::map<int, SoundFadeNode_> sound_fade_nodes_;
 
-  // This mutex controls access to our list of media component shared ptrs to
-  // delete in the main thread.
+  // This mutex controls access to our list of media component shared ptrs
+  // to delete in the main thread.
   std::mutex sound_ref_delete_list_mutex_;
 
   // Our list of sound media components to delete via the main thread.

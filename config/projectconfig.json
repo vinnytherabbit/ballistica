@@ -1,5 +1,5 @@
 {
-  "assets": "a-0.bastdassets.5",
+  "assets": "a-0.bastdassets.6",
   "code_source_dirs": [
     "src/ballistica"
   ],
@@ -27,18 +27,24 @@
   "public": true,
   "pylint_ignored_untracked_deps": [
     "__main__",
+    "urllib3",
     "astroid.modutils",
+    "astroid.nodes",
     "astroid",
     "pylint.lint",
     "pytest",
     "requests",
     "typing_extensions",
     "cpplint",
+    "libcst",
     "ansiwrap",
     "filelock",
     "Cocoa",
     "pdoc",
     "certifi",
+    "libcst.metadata",
+    "docutils.nodes",
+    "sphinx.application",
     "psutil",
     "pbxproj.XcodeProject",
     "pbxproj.pbxextensions",
@@ -47,7 +53,12 @@
     "jinja2",
     "jinja2.Environment",
     "tomlkit",
-    "urllib3.exceptions"
+    "urllib3.exceptions",
+    "urllib3.response",
+    "cryptography.exceptions",
+    "cryptography.hazmat.primitives.asymmetric.ed25519",
+    "sphinx.util.logging",
+    "pylint.checkers"
   ],
   "python_paths": [
     "src/assets/ba_data/python",
@@ -59,6 +70,7 @@
     "src/assets/ba_data/python",
     "src/assets/server_package",
     "src/assets/workspace",
+    "src/assets/sphinx/static",
     "src/meta",
     "tools",
     "tests",

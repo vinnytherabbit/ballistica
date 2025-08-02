@@ -4,6 +4,7 @@ include(CheckIncludeFile)
 
 option(HEADLESS "build headless server" OFF)
 option(TEST_BUILD "include testing features" OFF)
+option(DISCORD "enable Discord" OFF)
 
 # Requiring minimum of C++20 currently.
 set(CMAKE_CXX_STANDARD 20)
@@ -27,12 +28,12 @@ if (APPLE)
   # to load a 3.X library from within it which doesn't exist. So we need
   # to be a bit more explicit telling it where to look. Note: this was last
   # tested with 3.7; should revisit sometime to make sure still applies.
-  execute_process(COMMAND "python3.12-config" "--prefix"
+  execute_process(COMMAND "python3.13-config" "--prefix"
     OUTPUT_VARIABLE Python_ROOT_DIR
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 endif ()
-find_package (Python 3.12 REQUIRED EXACT COMPONENTS Development)
+find_package (Python 3.13 REQUIRED EXACT COMPONENTS Development)
   
 
 if (HEADLESS)
@@ -65,7 +66,7 @@ if (HEADLESS)
 endif ()
 
 if (TEST_BUILD)
-  add_definitions(-DBA_TEST_BUILD=1)
+  add_definitions(-DBA_VARIANT_TEST_BUILD=1)
 endif ()
 
 # Currently seeing warnings about parameter order changing in GCC 7.1
@@ -245,6 +246,8 @@ set(BALLISTICA_SOURCES
   ${BA_SRC_ROOT}/ballistica/base/audio/ogg_stream.h
   ${BA_SRC_ROOT}/ballistica/base/base.cc
   ${BA_SRC_ROOT}/ballistica/base/base.h
+  ${BA_SRC_ROOT}/ballistica/base/discord/discord.cc
+  ${BA_SRC_ROOT}/ballistica/base/discord/discord.h
   ${BA_SRC_ROOT}/ballistica/base/dynamics/bg/bg_dynamics.cc
   ${BA_SRC_ROOT}/ballistica/base/dynamics/bg/bg_dynamics.h
   ${BA_SRC_ROOT}/ballistica/base/dynamics/bg/bg_dynamics_draw_snapshot.h
@@ -444,8 +447,6 @@ set(BALLISTICA_SOURCES
   ${BA_SRC_ROOT}/ballistica/base/support/context.cc
   ${BA_SRC_ROOT}/ballistica/base/support/context.h
   ${BA_SRC_ROOT}/ballistica/base/support/display_timer.h
-  ${BA_SRC_ROOT}/ballistica/base/support/huffman.cc
-  ${BA_SRC_ROOT}/ballistica/base/support/huffman.h
   ${BA_SRC_ROOT}/ballistica/base/support/plus_soft.h
   ${BA_SRC_ROOT}/ballistica/base/support/repeater.cc
   ${BA_SRC_ROOT}/ballistica/base/support/repeater.h
@@ -471,6 +472,9 @@ set(BALLISTICA_SOURCES
   ${BA_SRC_ROOT}/ballistica/classic/support/v1_account.h
   ${BA_SRC_ROOT}/ballistica/core/core.cc
   ${BA_SRC_ROOT}/ballistica/core/core.h
+  ${BA_SRC_ROOT}/ballistica/core/logging/logging.cc
+  ${BA_SRC_ROOT}/ballistica/core/logging/logging.h
+  ${BA_SRC_ROOT}/ballistica/core/logging/logging_macros.h
   ${BA_SRC_ROOT}/ballistica/core/platform/apple/core_platform_apple.cc
   ${BA_SRC_ROOT}/ballistica/core/platform/apple/core_platform_apple.h
   ${BA_SRC_ROOT}/ballistica/core/platform/core_platform.cc
@@ -653,10 +657,14 @@ set(BALLISTICA_SOURCES
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/host_activity.h
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/host_session.cc
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/host_session.h
+  ${BA_SRC_ROOT}/ballistica/scene_v1/support/huffman.cc
+  ${BA_SRC_ROOT}/ballistica/scene_v1/support/huffman.h
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/player.cc
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/player.h
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/player_spec.cc
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/player_spec.h
+  ${BA_SRC_ROOT}/ballistica/scene_v1/support/replay_writer.cc
+  ${BA_SRC_ROOT}/ballistica/scene_v1/support/replay_writer.h
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/scene.cc
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/scene.h
   ${BA_SRC_ROOT}/ballistica/scene_v1/support/scene_v1_context.cc
@@ -672,8 +680,8 @@ set(BALLISTICA_SOURCES
   ${BA_SRC_ROOT}/ballistica/shared/buildconfig/buildconfig_cmake.h
   ${BA_SRC_ROOT}/ballistica/shared/buildconfig/buildconfig_common.h
   ${BA_SRC_ROOT}/ballistica/shared/buildconfig/buildconfig_windows_common.h
-  ${BA_SRC_ROOT}/ballistica/shared/buildconfig/buildconfig_windows_generic.h
   ${BA_SRC_ROOT}/ballistica/shared/buildconfig/buildconfig_windows_headless.h
+  ${BA_SRC_ROOT}/ballistica/shared/buildconfig/buildconfig_windows_testbuild.h
   ${BA_SRC_ROOT}/ballistica/shared/foundation/event_loop.cc
   ${BA_SRC_ROOT}/ballistica/shared/foundation/event_loop.h
   ${BA_SRC_ROOT}/ballistica/shared/foundation/exception.cc
@@ -683,14 +691,10 @@ set(BALLISTICA_SOURCES
   ${BA_SRC_ROOT}/ballistica/shared/foundation/feature_set_native_component.cc
   ${BA_SRC_ROOT}/ballistica/shared/foundation/feature_set_native_component.h
   ${BA_SRC_ROOT}/ballistica/shared/foundation/inline.cc
-  ${BA_SRC_ROOT}/ballistica/shared/foundation/inline.h
-  ${BA_SRC_ROOT}/ballistica/shared/foundation/logging.cc
-  ${BA_SRC_ROOT}/ballistica/shared/foundation/logging.h
   ${BA_SRC_ROOT}/ballistica/shared/foundation/macros.cc
   ${BA_SRC_ROOT}/ballistica/shared/foundation/macros.h
   ${BA_SRC_ROOT}/ballistica/shared/foundation/object.cc
   ${BA_SRC_ROOT}/ballistica/shared/foundation/object.h
-  ${BA_SRC_ROOT}/ballistica/shared/foundation/types.h
   ${BA_SRC_ROOT}/ballistica/shared/generic/base64.cc
   ${BA_SRC_ROOT}/ballistica/shared/generic/base64.h
   ${BA_SRC_ROOT}/ballistica/shared/generic/buffer.h
@@ -726,12 +730,12 @@ set(BALLISTICA_SOURCES
   ${BA_SRC_ROOT}/ballistica/shared/python/python_class.h
   ${BA_SRC_ROOT}/ballistica/shared/python/python_command.cc
   ${BA_SRC_ROOT}/ballistica/shared/python/python_command.h
+  ${BA_SRC_ROOT}/ballistica/shared/python/python_macros.h
   ${BA_SRC_ROOT}/ballistica/shared/python/python_module_builder.h
   ${BA_SRC_ROOT}/ballistica/shared/python/python_object_set.cc
   ${BA_SRC_ROOT}/ballistica/shared/python/python_object_set.h
   ${BA_SRC_ROOT}/ballistica/shared/python/python_ref.cc
   ${BA_SRC_ROOT}/ballistica/shared/python/python_ref.h
-  ${BA_SRC_ROOT}/ballistica/shared/python/python_sys.h
   ${BA_SRC_ROOT}/ballistica/template_fs/python/class/python_class_hello.cc
   ${BA_SRC_ROOT}/ballistica/template_fs/python/class/python_class_hello.h
   ${BA_SRC_ROOT}/ballistica/template_fs/python/methods/python_methods_template_fs.cc
@@ -772,6 +776,8 @@ set(BALLISTICA_SOURCES
   ${BA_SRC_ROOT}/ballistica/ui_v1/widget/row_widget.h
   ${BA_SRC_ROOT}/ballistica/ui_v1/widget/scroll_widget.cc
   ${BA_SRC_ROOT}/ballistica/ui_v1/widget/scroll_widget.h
+  ${BA_SRC_ROOT}/ballistica/ui_v1/widget/spinner_widget.cc
+  ${BA_SRC_ROOT}/ballistica/ui_v1/widget/spinner_widget.h
   ${BA_SRC_ROOT}/ballistica/ui_v1/widget/stack_widget.cc
   ${BA_SRC_ROOT}/ballistica/ui_v1/widget/stack_widget.h
   ${BA_SRC_ROOT}/ballistica/ui_v1/widget/text_widget.cc
@@ -783,6 +789,40 @@ set(BALLISTICA_SOURCES
 
 # BallisticaKit monolithic binary.
 add_executable(ballisticakitbin ${BALLISTICA_SOURCES})
+
+#++++++++++++++++++++++++discord_sdk+++++++++++++++++++++++++++++++
+if (DISCORD)
+set(DISCORD_SDK_ROOT "${CMAKE_SOURCE_DIR}/../src/external/discord_social_sdk")
+set(DISCORD_SDK_INCLUDE_DIR "${DISCORD_SDK_ROOT}/include")
+set(DISCORD_SDK_LIB_DIR "${DISCORD_SDK_ROOT}/lib/release")
+set(DISCORD_SDK_BIN_DIR "${DISCORD_SDK_ROOT}/bin/release")
+
+# Include Discord SDK headers
+include_directories(${DISCORD_SDK_INCLUDE_DIR})
+
+# Platform-specific Social SDK library paths
+if(WIN32)
+    set(DISCORD_LIB_PATH "${DISCORD_SDK_LIB_DIR}/discord_partner_sdk.lib")
+    set(DISCORD_SHARED_LIB "${DISCORD_SDK_BIN_DIR}/discord_partner_sdk.dll")
+elseif(APPLE)
+    set(DISCORD_LIB_PATH "${DISCORD_SDK_LIB_DIR}/libdiscord_partner_sdk.dylib")
+    set(DISCORD_SHARED_LIB "${DISCORD_SDK_LIB_DIR}/libdiscord_partner_sdk.dylib")
+else() # Linux
+    set(DISCORD_LIB_PATH "${DISCORD_SDK_LIB_DIR}/libdiscord_partner_sdk.so")
+    set(DISCORD_SHARED_LIB "${DISCORD_SDK_LIB_DIR}/libdiscord_partner_sdk.so")
+endif()
+
+# need to link to this instead
+# Copy the Discord shared library to the output directory
+add_custom_command(TARGET ballisticakitbin
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${DISCORD_SHARED_LIB}"
+        $<TARGET_FILE_DIR:ballisticakitbin>)
+
+set(EXTRA_INCLUDE_DIRS ${EXTRA_INCLUDE_DIRS} ${DISCORD_SDK_INCLUDE_DIR})
+set(EXTRA_LIBRARIES ${EXTRA_LIBRARIES} ${DISCORD_LIB_PATH})
+endif() #DISCORD
 
 # Gets -rdynamic added when linking gcc builds which exports all symbols
 # which gives us more meaningful stack traces using backtrace_symbols().  

@@ -15,12 +15,13 @@
 #include "ballistica/base/graphics/mesh/nine_patch_mesh.h"
 #include "ballistica/base/graphics/text/text_graphics.h"
 #include "ballistica/base/graphics/text/text_group.h"
-#include "ballistica/base/input/device/keyboard_input.h"  // IWYU pragma: keep.
+#include "ballistica/base/input/device/keyboard_input.h"
 #include "ballistica/base/input/input.h"
 #include "ballistica/base/logic/logic.h"
 #include "ballistica/base/platform/base_platform.h"
 #include "ballistica/base/python/base_python.h"
 #include "ballistica/base/python/support/python_context_call.h"
+#include "ballistica/base/ui/ui.h"
 #include "ballistica/core/platform/core_platform.h"
 #include "ballistica/shared/generic/utils.h"
 #include "ballistica/shared/python/python.h"
@@ -36,7 +37,7 @@ TextWidget::TextWidget() {
   // have a touchscreen (android-tv type situations).
   //
   // FIXME - should generalize this to any controller-only situation.
-  if (g_buildconfig.ostype_android()) {
+  if (g_buildconfig.platform_android()) {
     if (g_base->input->touch_input() == nullptr) {
       implicit_clear_button_ = false;
     }
@@ -275,7 +276,7 @@ void TextWidget::Draw(base::RenderPass* pass, bool draw_transparent) {
       {
         auto xf = c.ScopedTransform();
         c.Translate(r - 20, b * 0.5f + t * 0.5f, 0.1f);
-        if (g_base->ui->scale() == UIScale::kSmall) {
+        if (g_base->ui->uiscale() == UIScale::kSmall) {
           c.Scale(30, 30);
         } else {
           c.Scale(25, 25);
@@ -547,8 +548,7 @@ void TextWidget::SetText(const std::string& text_in_raw) {
 
   if (do_format_check) {
     bool valid;
-    g_base->assets->CompileResourceString(
-        text_in_raw, "TextWidget::set_text format check", &valid);
+    g_base->assets->CompileResourceString(text_in_raw, &valid);
     if (!valid) {
       BA_LOG_ONCE(LogName::kBa, LogLevel::kError,
                   "Invalid resource string: '" + text_in_raw + "'");
@@ -644,8 +644,8 @@ void TextWidget::InvokeStringEditor_() {
                     .Get(UIV1Python::ObjID::kTextWidgetStringEditAdapterClass)
                     .Call(args);
   if (!result.exists()) {
-    g_core->Log(LogName::kBa, LogLevel::kError,
-                "Error invoking string edit dialog.");
+    g_core->logging->Log(LogName::kBa, LogLevel::kError,
+                         "Error invoking string edit dialog.");
     return;
   }
 
@@ -718,7 +718,8 @@ auto TextWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
         return false;
       case SDLK_RETURN:
       case SDLK_KP_ENTER:
-        if (g_buildconfig.ostype_ios_tvos() || g_buildconfig.ostype_android()) {
+        if (g_buildconfig.platform_ios_tvos()
+            || g_buildconfig.platform_android()) {
           // On mobile, return currently just deselects us.
           g_base->audio->SafePlaySysSound(base::SysSoundID::kSwish);
           parent_widget()->SelectWidget(nullptr);
@@ -844,8 +845,8 @@ auto TextWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
           // FIXME: may need to test/tweak this behavior for cases where
           //  we pop up a UI dialog for text input..
           if (editable()) {
-            if (auto* kb = g_base->input->keyboard_input()) {
-              g_base->ui->SetUIInputDevice(kb);
+            if (base::KeyboardInput* kb = g_base->input->keyboard_input()) {
+              g_base->ui->SetMainUIInputDevice(kb);
             }
           }
           GlobalSelect();
@@ -864,7 +865,8 @@ auto TextWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
         return false;
       }
     }
-    case base::WidgetMessage::Type::kMouseUp: {
+    case base::WidgetMessage::Type::kMouseUp:
+    case base::WidgetMessage::Type::kMouseCancel: {
       float x{ScaleAdjustedX_(m.fval1)};
       float y{ScaleAdjustedY_(m.fval2)};
       bool claimed = (m.fval3 > 0.0f);
@@ -874,12 +876,16 @@ auto TextWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
           && (!text_raw_.empty()) && (x >= width_ - 35 - kClearMargin)
           && (x < width_ + kClearMargin) && (y >= 0 - kClearMargin)
           && (y < height_ + kClearMargin)) {
-        text_raw_ = "";
-        text_translation_dirty_ = true;
-        carat_position_ = 0;
-        text_group_dirty_ = true;
         clear_pressed_ = false;
-        g_base->audio->SafePlaySysSound(base::SysSoundID::kTap);
+
+        if (m.type == base::WidgetMessage::Type::kMouseUp) {
+          text_raw_ = "";
+          text_translation_dirty_ = true;
+          carat_position_ = 0;
+          text_group_dirty_ = true;
+          g_base->audio->SafePlaySysSound(base::SysSoundID::kTap);
+        }
+
         return true;
       }
       clear_pressed_ = false;
@@ -891,17 +897,21 @@ auto TextWidget::HandleMessage(const base::WidgetMessage& m) -> bool {
         if (pressed_activate_ && (x >= (-left_overlap))
             && (x < (width_ + right_overlap)) && (y >= (-bottom_overlap))
             && (y < (height_ + top_overlap)) && !claimed) {
-          Activate();
           pressed_activate_ = false;
+          if (m.type == base::WidgetMessage::Type::kMouseUp) {
+            Activate();
+          }
         } else if (editable_ && ShouldUseStringEditor_()
                    && (x >= (-left_overlap)) && (x < (width_ + right_overlap))
                    && (y >= (-bottom_overlap)) && (y < (height_ + top_overlap))
                    && !claimed) {
-          // With dialog-editing, a click/tap brings up our editor.
-          InvokeStringEditor_();
+          if (m.type == base::WidgetMessage::Type::kMouseUp) {
+            // With dialog-editing, a click/tap brings up our editor.
+            InvokeStringEditor_();
+          }
         }
 
-        // Pressed buttons always claim mouse-ups presented to them.
+        // Pressed buttons always claim mouse-ups/cancels presented to them.
         return true;
       }
       break;
@@ -951,8 +961,7 @@ void TextWidget::UpdateTranslation_() {
     if (editable()) {
       text_translated_ = text_raw_;
     } else {
-      text_translated_ = g_base->assets->CompileResourceString(
-          text_raw_, "TextWidget::UpdateTranslation");
+      text_translated_ = g_base->assets->CompileResourceString(text_raw_);
     }
     text_translation_dirty_ = false;
     text_group_dirty_ = true;

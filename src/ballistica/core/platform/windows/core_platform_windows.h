@@ -2,7 +2,7 @@
 
 #ifndef BALLISTICA_CORE_PLATFORM_WINDOWS_CORE_PLATFORM_WINDOWS_H_
 #define BALLISTICA_CORE_PLATFORM_WINDOWS_CORE_PLATFORM_WINDOWS_H_
-#if BA_OSTYPE_WINDOWS
+#if BA_PLATFORM_WINDOWS
 
 #include <cstdio>
 #include <list>
@@ -26,7 +26,6 @@ class CorePlatformWindows : public CorePlatform {
   auto GetNativeStackTrace() -> NativeStackTrace* override;
   auto GetDeviceV1AccountUUIDPrefix() -> std::string override { return "w"; }
   auto GetDeviceUUIDInputs() -> std::list<std::string> override;
-  auto GenerateUUID() -> std::string override;
   auto DoGetConfigDirectoryMonolithicDefault()
       -> std::optional<std::string> override;
   auto DoGetDataDirectoryMonolithicDefault() -> std::string override;
@@ -40,7 +39,7 @@ class CorePlatformWindows : public CorePlatform {
   auto GetSocketErrorString() -> std::string override;
   auto GetSocketError() -> int override;
   void DoMakeDir(const std::string& dir, bool quiet) override;
-  auto GetLocale() -> std::string override;
+  auto GetLocaleTag() -> std::string override;
   auto DoGetDeviceName() -> std::string override;
   auto DoGetDeviceDescription() -> std::string override;
   auto DoHasTouchScreen() -> bool override;
@@ -55,8 +54,8 @@ class CorePlatformWindows : public CorePlatform {
   void CloseSocket(int socket) override;
   auto GetBroadcastAddrs() -> std::vector<uint32_t> override;
   auto SetSocketNonBlocking(int sd) -> bool override;
-  auto GetPlatformName() -> std::string override;
-  auto GetSubplatformName() -> std::string override;
+  auto GetLegacyPlatformName() -> std::string override;
+  auto GetLegacySubplatformName() -> std::string override;
   bool have_stdin_stdout_ = false;
 
   auto FormatWinStackTraceForDisplay(WinStackTrace* stack_trace) -> std::string;
@@ -69,5 +68,5 @@ class CorePlatformWindows : public CorePlatform {
 
 }  // namespace ballistica::core
 
-#endif  // BA_OSTYPE_WINDOWS
+#endif  // BA_PLATFORM_WINDOWS
 #endif  // BALLISTICA_CORE_PLATFORM_WINDOWS_CORE_PLATFORM_WINDOWS_H_
