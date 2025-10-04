@@ -707,12 +707,12 @@ class Spaz(bs.Actor):
         assert not self.expired
 
         if isinstance(msg, bs.PickedUpMessage):
-            if self.node:
+            if self.node and msg.node.hold_node == self.node:
                 self.node.handlemessage('hurt_sound')
                 self.node.handlemessage('picked_up')
 
-            # This counts as a hit.
-            self._num_times_hit += 1
+                # This counts as a hit.
+                self._num_times_hit += 1
 
         elif isinstance(msg, bs.ShouldShatterMessage):
             # Eww; seems we have to do this in a timer or it wont work right.
@@ -907,17 +907,6 @@ class Spaz(bs.Actor):
                 )
                 return True
 
-            # If we were recently hit, don't count this as another.
-            # (so punch flurries and bomb pileups essentially count as 1 hit).
-            local_time = int(bs.time() * 1000.0)
-            assert isinstance(local_time, int)
-            if (
-                self._last_hit_time is None
-                or local_time - self._last_hit_time > 1000
-            ):
-                self._num_times_hit += 1
-                self._last_hit_time = local_time
-
             mag = msg.magnitude * self.impact_scale
             velocity_mag = msg.velocity_magnitude * self.impact_scale
             damage_scale = 0.22
@@ -948,6 +937,9 @@ class Spaz(bs.Actor):
                     )
                     damage = damage_scale * self.node.damage
 
+                if damage == 0.0
+                    return True
+                
                 assert self.shield_hitpoints is not None
                 self.shield_hitpoints -= int(damage)
                 self.shield.hurt = (
@@ -1040,7 +1032,6 @@ class Spaz(bs.Actor):
                 )
 
                 damage = int(damage_scale * self.node.damage)
-            self.node.handlemessage('hurt_sound')
 
             # Play punch impact sound based on damage if it was a punch.
             if msg.hit_type == 'punch':
@@ -1151,22 +1142,37 @@ class Spaz(bs.Actor):
                     # (so it *can* still kill us if its high enough).
                     newdamage = max(damage - 200, self.hitpoints - 10)
                     damage = newdamage
-                self.node.handlemessage('flash')
 
-                # If we're holding something, drop it.
-                if damage > 0.0 and self.node.hold_node:
-                    self.node.hold_node = None
                 self.hitpoints -= damage
                 self.node.hurt = (
                     1.0 - float(self.hitpoints) / self.hitpoints_max
                 )
 
-                # If we're cursed, *any* damage blows us up.
-                if self._cursed and damage > 0:
-                    bs.timer(
-                        0.05,
-                        bs.WeakCall(
-                            self.curse_explode, msg.get_source_player(bs.Player)
+                if damage > 0.0:
+                    self.node.handlemessage('flash')
+                    self.node.handlemessage('hurt_sound')
+
+                    # If we were recently hit, don't count this as another.
+                    # (so punch flurries and bomb pileups essentially count as 1 hit).
+                    local_time = int(bs.time() * 1000.0)
+                    assert isinstance(local_time, int)
+                    if (
+                        self._last_hit_time is None
+                        or local_time - self._last_hit_time > 1000
+                    ):
+                        self._num_times_hit += 1
+                        self._last_hit_time = local_time
+  
+                    # If we're holding something, drop it.
+                    if self.node.hold_node:
+                        self.node.hold_node = None
+
+                    # If we're cursed, *any* damage blows us up
+                    if self._cursed:
+                        bs.timer(
+                            0.05,
+                            bs.WeakCall(
+                                self.curse_explode, msg.get_source_player(bs.Player)
                         ),
                     )
 
