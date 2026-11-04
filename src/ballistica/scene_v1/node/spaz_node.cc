@@ -2328,24 +2328,52 @@ void SpazNode::Step() {
     right_toes_joint_2_->linearEnabled = (t % 3 == 2);
   }
 
-  // Update our limb-self-collide value.
-  // In certain cases (such as slowly walking in a straight line)
-  // we can completely skip collision tests between ourself with no
-  // real visual difference. This is a nice efficiency boost.
+  // Update our limb-self-collide value. In certain cases (such as
+  // slowly walking in a straight line) we can completely skip
+  // collision tests between ourself with no real visual difference.
+  // This is a nice efficiency boost. We inch self-collide down if
+  // we're moving steadily, not turning too fast, and not hurt or
+  // holding stuff.
+  const float prev_limb_self_collide = limb_self_collide_;
+  if (vel_length > 1.0f
+      && (std::abs(lr_smooth_) > 0.5f || std::abs(ud_smooth_) > 0.5f)) {
+    limb_self_collide_ -= 0.01f;
+  } else {
+    limb_self_collide_ += 0.1f;
+  }
+  if (std::abs(a_vel_y_smoothed_) > 5.0f) {
+    limb_self_collide_ += 0.2f;
+  }
+  if (knockout_ != 0 || holding_something_) {
+    limb_self_collide_ += 0.1f;
+  }
+  limb_self_collide_ = std::clamp(limb_self_collide_, 0.0f, 1.0f);
 
-  // (Turned this off at some point; don't remember why.)
-  // We inch self-collide down if we're moving steadily, not turning too
-  // fast, and not hurt or holding stuff.
-  //  if (vel_length > 1.0f
-  //      and (std::abs(lr_smooth_) > 0.5f or std::abs(ud_smooth_) > 0.5f)) {
-  //    limb_self_collide_ -= 0.01f;
-  //  } else {
-  //    limb_self_collide_ += 0.1f;
-  //  }
-
-  // if (std::abs(_aVelYSmoothed) > 5.0f) limb_self_collide_ += 0.2f;
-  // if (knockout_ != 0 or holding_something_) limb_self_collide_ += 0.1f;
-  // limb_self_collide_ = std::min(1.0f,std::max(0.0f,limb_self_collide_));
+  // Dev aid (BA_LIMB_SELF_COLLIDE_TRACE): show the value as it moves
+  // (throttled) and call out the moment it bottoms out (self-collision
+  // tests are skipped at that point).
+  static const bool s_limb_self_collide_trace =
+      getenv("BA_LIMB_SELF_COLLIDE_TRACE") != nullptr;
+  static int s_limb_self_collide_tick = 0;
+  if (s_limb_self_collide_trace) {
+    ++s_limb_self_collide_tick;
+    if (s_limb_self_collide_tick == 1
+        || (s_limb_self_collide_tick % 60) == 0) {
+      printf(
+          "LIMBSELFCOLLIDE %d node %d value %.3f vel %.2f"
+          " lr %.2f ud %.2f avel %.2f ko %d hold %d\n",
+          static_cast<int>(scene()->time()), static_cast<int>(id()),
+          limb_self_collide_, vel_length, lr_smooth_, ud_smooth_,
+          a_vel_y_smoothed_, static_cast<int>(knockout_),
+          static_cast<int>(holding_something_));
+      fflush(stdout);
+    }
+    if (prev_limb_self_collide > 0.0f && limb_self_collide_ == 0.0f) {
+      printf("LIMBSELFCOLLIDE %d node %d REACHED ZERO\n",
+             static_cast<int>(scene()->time()), static_cast<int>(id()));
+      fflush(stdout);
+    }
+  }
 
   // Keep track of how long we're off the ground.
   if (footing_) {
@@ -2707,7 +2735,7 @@ void SpazNode::Step() {
 
     // shut our eyes if we're knocked out (unless we're flying thru the air)
     // if (knockout_ and footing_) blink_ = 2.0f;
-    if (knockout_) {
+    if (knockout_ && footing_ && !can_fly_) {
       blink_ = 2.0f;
     }
 
@@ -5584,7 +5612,9 @@ auto SpazNode::PreFilterCollision(RigidBody* colliding_body,
   assert(colliding_body->part()->node() == this);
   if (opposing_body->part()->node() == this) {
     // If self-collide has gone down to zero we can just skip this completely.
-    // if (!frozen_ and limb_self_collide_ < 0.01f) return false;
+    if (!frozen_ && limb_self_collide_ < 0.01f) {
+      return false;
+    }
 
     int our_id = colliding_body->id();
     int their_id = opposing_body->id();

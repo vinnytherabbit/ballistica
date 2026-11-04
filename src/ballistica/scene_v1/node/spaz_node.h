@@ -787,6 +787,7 @@ class SpazNode : public Node {
   // ApplyJointTargets_, the bg rig over its channel).
   SpazPose pose_;
   SpazJointTarget joint_targets_[kSpazJointCount];
+  float limb_self_collide_{};
   float damage_smoothed_{};
   float damage_out_{};
   float punch_dir_x_{1.0f};
