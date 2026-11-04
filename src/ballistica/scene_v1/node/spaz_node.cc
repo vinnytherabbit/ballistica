@@ -2735,7 +2735,7 @@ void SpazNode::Step() {
 
     // shut our eyes if we're knocked out (unless we're flying thru the air)
     // if (knockout_ and footing_) blink_ = 2.0f;
-    if (knockout_ && footing_ && !can_fly_) {
+    if (knockout_) {
       blink_ = 2.0f;
     }
 
