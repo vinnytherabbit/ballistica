@@ -48,6 +48,11 @@ class BGDynamicsCharacterRig {
   /// BGDynamicsCharacterKind::Input::shattered. Sticky until changed.
   void SetShattered(bool shattered);
 
+  /// Self-collision suppression; see
+  /// BGDynamicsCharacterKind::Input::limb_self_collide. Sticky until
+  /// changed.
+  void SetLimbSelfCollide(float value);
+
   /// This step's limb joint targets (Config::limb_joints order, count
   /// entries); see BGDynamicsCharacterKind::Input::limb_joints.
   void SetLimbJointTargets(

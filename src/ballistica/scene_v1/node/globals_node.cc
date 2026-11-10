@@ -71,6 +71,8 @@ class GlobalsNodeType : public NodeType {
   // with subclasses needs the _LATE macros (see 42/43 in that list).
   BA_FLOAT_ARRAY_ATTR(gravity, GetGravity, SetGravity);
   BA_BOOL_ATTR(legacy_spaz_limbs, legacy_spaz_limbs, set_legacy_spaz_limbs);
+  BA_INT_ATTR(limb_self_collide_skip, limb_self_collide_skip,
+              set_limb_self_collide_skip);
 #undef BA_NODE_TYPE_CLASS
 
   GlobalsNodeType()
@@ -104,7 +106,11 @@ class GlobalsNodeType : public NodeType {
         music(this),
         music_count(this),
         gravity(this),
-        legacy_spaz_limbs(this) {}
+        legacy_spaz_limbs(this),
+        limb_self_collide_skip(this) {
+    limb_self_collide_skip.set_min_protocol(
+        kProtocolVersionLimbSelfCollideSkip);
+  }
 };
 
 static NodeType* node_type{};

@@ -254,6 +254,17 @@ void AppConfig::SetupEntries_() {
   int_entries_[IntID::kSceneV1HostProtocol] =
       IntEntry("SceneV1 Host Protocol", 46);
 
+  // Limb self-collision skipping (see BoolID::kOptimizeLimbSelfCollide).
+  // Offline/local games turn it on once the player count reaches the
+  // minimum below; at 0 the count gate is disabled.
+  int_entries_[IntID::kLimbSelfCollideMinPlayers] =
+      IntEntry("Limb Self-Collision Min Players", 2);
+
+  // Locally-hosted games also turn limb self-collision skipping on when
+  // the frame rate drops below this value (0 disables the FPS trigger).
+  int_entries_[IntID::kLimbSelfCollideFpsThreshold] =
+      IntEntry("Limb Self-Collision FPS Threshold", 45);
+
   bool_entries_[BoolID::kTouchControlsSwipeHidden] =
       BoolEntry("Touch Controls Swipe Hidden", false);
   bool_entries_[BoolID::kTouchControlsHaptics] =
@@ -263,6 +274,14 @@ void AppConfig::SetupEntries_() {
   bool_entries_[BoolID::kFullscreen] = BoolEntry("Fullscreen", false);
   bool_entries_[BoolID::kKickIdlePlayers] =
       BoolEntry("Kick Idle Players", false);
+
+  // Let activities skip some spaz self-collision tests while moving
+  // steadily (an old efficiency optimization). Large characters can
+  // visibly deform while it is active, so it is gated by player count
+  // and/or frame rate; see the two 'Limb Self-Collision *' int values.
+  // Dedicated servers use their own config value instead.
+  bool_entries_[BoolID::kOptimizeLimbSelfCollide] =
+      BoolEntry("Optimize Limb Self-Collision", true);
 
   bool_entries_[BoolID::kAlwaysUseInternalKeyboard] =
       BoolEntry("Always Use Internal Keyboard", false);

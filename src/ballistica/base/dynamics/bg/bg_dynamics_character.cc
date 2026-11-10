@@ -57,6 +57,12 @@ void BGDynamicsCharacterRig::SetShattered(bool shattered) {
   input.shattered = shattered;
 }
 
+void BGDynamicsCharacterRig::SetLimbSelfCollide(float value) {
+  assert(g_base->InLogicThread());
+  auto& input = world_->channel<BGDynamicsCharacterKind>().input(slot_);
+  input.limb_self_collide = std::clamp(value, 0.0f, 1.0f);
+}
+
 void BGDynamicsCharacterRig::SetLimbJointTargets(
     const BGDynamicsCharacterKind::LimbJointTarget* targets, int count) {
   assert(g_base->InLogicThread());
@@ -474,6 +480,13 @@ auto BGDynamicsCharacterKind::Sim::PairGeom_(int ref, float* stiffness,
 
 void BGDynamicsCharacterKind::Sim::CollideSelfPairs_(
     BGDynamicsWorldServer* server) {
+  // Mirror the main sim's PreFilterCollision: once the owner's
+  // self-collide value bottoms out (steady movement, nothing held or
+  // hurting) every self-pair check is skipped. Frozen characters keep
+  // colliding, exactly as there.
+  if (!frozen_ && input_.limb_self_collide < 0.01f) {
+    return;
+  }
   // The main sim's self-collision treatment: the limb's contact
   // softness (the stiffer of the two for limb-vs-limb) and no friction.
   // Shattered contacts harden (x100/x10) as in the main sim.

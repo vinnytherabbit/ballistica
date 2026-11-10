@@ -66,6 +66,18 @@ class ServerConfig:
     # of it.
     legacy_spaz_physics: bool = False
 
+    # If True, the server lets spazzes skip some of their own collision
+    # tests while moving steadily. This saves CPU but can make some
+    # characters look a little strange in certain cases, so it is off
+    # by default. It does not affect gameplay. Only applies once the
+    # session has at least limb_self_collide_min_players players, and
+    # networked play needs protocol_version 58 or newer.
+    limb_self_collide_skip: bool = False
+
+    # Player count at which limb_self_collide_skip kicks in. 0 makes it
+    # apply from the first player. Ignored unless the above is True.
+    limb_self_collide_min_players: int = 2
+
     # To be included in the public server list, your server MUST be
     # accessible via an ipv4 address. By default, the master server will
     # try to use the address your server contacts it from, but this may

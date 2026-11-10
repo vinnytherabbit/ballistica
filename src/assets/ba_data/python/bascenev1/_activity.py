@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING, override
 
 import babase
+import _babase
 import _bascenev1
 from bascenev1._actorhost import ActorHost
 from bascenev1._messages import UNHANDLED
@@ -168,6 +169,9 @@ class Activity[PlayerT: bascenev1.Player, TeamT: bascenev1.Team](ActorHost):
         self._transitioning_out = False
 
         self._prune_dead_actors_timer: bascenev1.Timer | None = None
+        self._limb_self_collide_skip_timer: bascenev1.AppTimer | None = None
+        self._limb_self_collide_skip_state: tuple[int, bool] | None = None
+        self._limb_self_collide_skip_legacy_warned: bool = False
 
         self.teams = []
         self.players = []
@@ -431,6 +435,20 @@ class Activity[PlayerT: bascenev1.Player, TeamT: bascenev1.Team](ActorHost):
 
             _bascenev1.timer(13.3, self._prune_delay_deletes, repeat=True)
 
+            # Keep the limb self-collision optimization in sync with
+            # player counts / frame rate (see
+            # _update_limb_self_collide_skip). Poll fairly often so that a
+            # client joining a pre-58 host (where the setting can not be
+            # streamed) is noticed quickly and we stop using the local
+            # only optimization before it can cause a visible mismatch.
+            self._update_limb_self_collide_skip()
+            with babase.ContextRef.empty():
+                self._limb_self_collide_skip_timer = babase.AppTimer(
+                    0.2,
+                    babase.WeakCallStrict(self._update_limb_self_collide_skip),
+                    repeat=True,
+                )
+
             # Also start our low-level scene running.
             self._activity_data.start()
 
@@ -450,6 +468,9 @@ class Activity[PlayerT: bascenev1.Player, TeamT: bascenev1.Team](ActorHost):
         """
         assert not self._transitioning_out
         self._transitioning_out = True
+        self._limb_self_collide_skip_timer = None
+        self._limb_self_collide_skip_state = None
+        self._limb_self_collide_skip_legacy_warned = False
         with self.context:
             try:
                 self.on_transition_out()
@@ -702,6 +723,85 @@ class Activity[PlayerT: bascenev1.Player, TeamT: bascenev1.Team](ActorHost):
                 )
         assert issubclass(self._playertype, Player)
         assert issubclass(self._teamtype, Team)
+
+    def _update_limb_self_collide_skip(self) -> None:
+        """Apply the limb self-collision skip policy to our globals node.
+
+        The old optimization lets spazzes stop testing some of their own
+        collisions while moving steadily. It saves CPU but can make wide
+        characters deform, so it is opt-in: dedicated servers use their
+        own config, while local games use the 'Optimize Limb
+        Self-Collision' settings (including automatic activation when the
+        frame rate drops).
+        """
+        glb = self._globalsnode
+        if glb is None:
+            return
+
+        # Clients and replays must follow whatever the host streamed. Local
+        # settings (including the low-FPS trigger) should only ever drive a
+        # game we are hosting ourselves.
+        if (
+            _bascenev1.get_connection_to_host_info_2() is not None
+            or _bascenev1.is_in_replay()
+        ):
+            return
+
+        classic = babase.app.classic
+        if classic is not None and classic.server is not None:
+            # Dedicated server: its config decides (no FPS trigger).
+            enabled = classic.limb_self_collide_skip
+            min_players = classic.limb_self_collide_min_players
+            fps_threshold = 0
+        else:
+            config = babase.app.config
+            enabled = bool(config.resolve('Optimize Limb Self-Collision'))
+            min_players = int(config.resolve('Limb Self-Collision Min Players'))
+            fps_threshold = int(
+                config.resolve('Limb Self-Collision FPS Threshold')
+            )
+
+        mode = 0
+        if enabled:
+            try:
+                player_count = len(self.session.sessionplayers)
+            except babase.SessionNotFoundError:
+                player_count = 0
+            if min_players <= 0 or player_count >= min_players:
+                mode = 1
+            elif fps_threshold > 0:
+                fps = _babase.get_last_fps()
+                if 0 < fps < fps_threshold:
+                    mode = 1
+
+        # Streams can only carry the attr from protocol 58 on. Pre-58 peers
+        # (including older builds, which always ran the optimization) leave
+        # it at the legacy default of 1, so while clients are connected we
+        # must do the same to avoid simulating differently. With nobody
+        # connected there is no one to mismatch, so the local policy can
+        # apply.
+        if _bascenev1.protocol_version() >= 58:
+            state = (mode, True)
+            if self._limb_self_collide_skip_state == state:
+                return
+            glb.limb_self_collide_skip = mode
+            self._limb_self_collide_skip_state = state
+        else:
+            if _bascenev1.have_connected_clients():
+                if mode == 0 and not self._limb_self_collide_skip_legacy_warned:
+                    self._limb_self_collide_skip_legacy_warned = True
+                    logging.warning(
+                        'Limb self-collision skip can not be disabled while'
+                        ' clients are connected to a host on protocol %d;'
+                        ' it needs protocol 58 or newer.',
+                        _bascenev1.protocol_version(),
+                    )
+                mode = 1
+            state = (mode, False)
+            if self._limb_self_collide_skip_state == state:
+                return
+            _bascenev1.set_limb_self_collide_skip_local(glb, mode)
+            self._limb_self_collide_skip_state = state
 
     @classmethod
     def _check_activity_death(

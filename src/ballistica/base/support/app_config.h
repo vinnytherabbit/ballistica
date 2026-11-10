@@ -63,6 +63,8 @@ class AppConfig {
     kPort,
     kMaxFPS,
     kSceneV1HostProtocol,
+    kLimbSelfCollideMinPlayers,
+    kLimbSelfCollideFpsThreshold,
     kLast  // Sentinel.
   };
 
@@ -88,6 +90,7 @@ class AppConfig {
     kHighlightPotentialTokenPurchases,
     kUseNativePythonREPL,
     kDisableXInput,
+    kOptimizeLimbSelfCollide,
     kLast  // Sentinel.
   };
 

@@ -787,6 +787,10 @@ class SpazNode : public Node {
   // ApplyJointTargets_, the bg rig over its channel).
   SpazPose pose_;
   SpazJointTarget joint_targets_[kSpazJointCount];
+  // Starts at zero (skip active) as it always has, so spazzes created
+  // mid-game (a joining client, a respawn) match the ramp state of
+  // already-running ones. When the activity has the optimization off,
+  // Step() forces this back to 1 before any collision filtering runs.
   float limb_self_collide_{};
   float damage_smoothed_{};
   float damage_out_{};

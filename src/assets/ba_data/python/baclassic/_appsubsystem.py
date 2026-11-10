@@ -237,6 +237,11 @@ class ClassicAppSubsystem(babase.AppSubsystem):
         # noticeably more bandwidth when hosting.
         self.legacy_spaz_physics = False
 
+        # Dedicated-server config for the spaz limb self-collision skip
+        # (see the ServerConfig fields of the same names).
+        self.limb_self_collide_skip = False
+        self.limb_self_collide_min_players = 2
+
         # UI.
         self.first_main_menu = True  # FIXME: Move to mainmenu class.
         self.did_menu_intro = False  # FIXME: Move to mainmenu class.

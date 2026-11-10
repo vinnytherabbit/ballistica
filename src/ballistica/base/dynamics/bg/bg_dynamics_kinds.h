@@ -268,6 +268,11 @@ struct BGDynamicsCharacterKind {
     // (AnchorSpec::collides_loose_limbs) so the pieces don't pass
     // through the body they just left.
     bool shattered{};
+    // Self-collision suppression, mirroring the main sim's
+    // SpazNode::PreFilterCollision: while this is near zero (and the
+    // character is not frozen) the configured collision pairs are
+    // skipped entirely. 1 = always collide.
+    float limb_self_collide{1.0f};
     // Per-step limb joint state from the owner's pose driver, in
     // Config::limb_joints order. Applied verbatim each step.
     bool have_limb_targets{};

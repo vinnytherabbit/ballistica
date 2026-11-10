@@ -441,6 +441,10 @@ class ServerController:
 
         classic.allow_punch_grab = self._config.allow_punch_grab
         classic.legacy_spaz_physics = self._config.legacy_spaz_physics
+        classic.limb_self_collide_skip = self._config.limb_self_collide_skip
+        classic.limb_self_collide_min_players = (
+            self._config.limb_self_collide_min_players
+        )
 
         bascenev1.set_enable_default_kick_voting(
             self._config.enable_default_kick_voting

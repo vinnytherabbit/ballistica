@@ -120,6 +120,10 @@
   [
    "legacy_spaz_limbs",
    "bool"
+  ],
+  [
+   "limb_self_collide_skip",
+   "int"
   ]
  ],
  "sessionglobals": [

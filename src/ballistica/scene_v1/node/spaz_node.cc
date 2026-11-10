@@ -2331,23 +2331,34 @@ void SpazNode::Step() {
   // Update our limb-self-collide value. In certain cases (such as
   // slowly walking in a straight line) we can completely skip
   // collision tests between ourself with no real visual difference.
-  // This is a nice efficiency boost. We inch self-collide down if
-  // we're moving steadily, not turning too fast, and not hurt or
-  // holding stuff.
+  // This is a nice efficiency boost, but large characters can visibly
+  // deform when their head/torso stop colliding, so it is opt-in per
+  // activity (see GlobalsNode::limb_self_collide_skip). We inch
+  // self-collide down if we're moving steadily, not turning too fast,
+  // and not hurt or holding stuff.
   const float prev_limb_self_collide = limb_self_collide_;
-  if (vel_length > 1.0f
-      && (std::abs(lr_smooth_) > 0.5f || std::abs(ud_smooth_) > 0.5f)) {
-    limb_self_collide_ -= 0.01f;
+  bool limb_self_collide_skip = false;
+  if (GlobalsNode* globals = scene()->globals_node()) {
+    limb_self_collide_skip = globals->limb_self_collide_skip() != 0;
+  }
+  if (!limb_self_collide_skip) {
+    // Hold at full self-collision so PreFilterCollision never skips.
+    limb_self_collide_ = 1.0f;
   } else {
-    limb_self_collide_ += 0.1f;
+    if (vel_length > 1.0f
+        && (std::abs(lr_smooth_) > 0.5f || std::abs(ud_smooth_) > 0.5f)) {
+      limb_self_collide_ -= 0.01f;
+    } else {
+      limb_self_collide_ += 0.1f;
+    }
+    if (std::abs(a_vel_y_smoothed_) > 5.0f) {
+      limb_self_collide_ += 0.2f;
+    }
+    if (knockout_ != 0 || holding_something_) {
+      limb_self_collide_ += 0.1f;
+    }
+    limb_self_collide_ = std::clamp(limb_self_collide_, 0.0f, 1.0f);
   }
-  if (std::abs(a_vel_y_smoothed_) > 5.0f) {
-    limb_self_collide_ += 0.2f;
-  }
-  if (knockout_ != 0 || holding_something_) {
-    limb_self_collide_ += 0.1f;
-  }
-  limb_self_collide_ = std::clamp(limb_self_collide_, 0.0f, 1.0f);
 
   // Dev aid (BA_LIMB_SELF_COLLIDE_TRACE): show the value as it moves
   // (throttled) and call out the moment it bottoms out (self-collision
@@ -2593,6 +2604,10 @@ void SpazNode::Step() {
       dst.angular_damping = src.angularDamping;
     }
     attachment_rig_->SetLimbJointTargets(targets, 16);
+    // Mirror the main sim's self-collide ramp: the bg rig skips its
+    // configured self-collision pairs at the same point PreFilterCollision
+    // would skip the main sim's.
+    attachment_rig_->SetLimbSelfCollide(limb_self_collide_);
 
     // Dev aid (BA_BG_LIMBS_TRACE): each bg limb's pose relative to
     // its anchor twin next to the main-sim limb's relative to the

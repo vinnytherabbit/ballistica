@@ -43,6 +43,33 @@ _advstrs = _classicassets.strings.settings.advanced
 #: The 'follow the OS locale' language choice.
 _LANGUAGE_AUTO = 'Auto'
 
+# The limb self-collision optimization controls are English-only for now
+# (localization is a follow-up). The description deliberately avoids
+# naming any particular character and notes that gameplay is unaffected.
+_OPTIMIZE_LIMB_SELF_COLLIDE_LABEL = LangStrSpecValue.literal(
+    'Optimize Limb Self-Collision'
+)
+_OPTIMIZE_LIMB_SELF_COLLIDE_DESCRIPTION = LangStrSpecValue.literal(
+    "Skips some collision checks between a character's own body parts"
+    ' while it moves steadily, which can improve performance. In some'
+    ' cases this may make certain characters look a little strange, but'
+    ' it does not affect gameplay.'
+)
+_LIMB_SELF_COLLIDE_MIN_PLAYERS_LABEL = LangStrSpecValue.literal(
+    'Limb Self-Collision Min Players'
+)
+_LIMB_SELF_COLLIDE_MIN_PLAYERS_DESCRIPTION = LangStrSpecValue.literal(
+    'Turn the optimization on once a game you host locally has at least'
+    ' this many players. 0 turns it on from the first player.'
+)
+_LIMB_SELF_COLLIDE_FPS_THRESHOLD_LABEL = LangStrSpecValue.literal(
+    'Limb Self-Collision FPS Threshold'
+)
+_LIMB_SELF_COLLIDE_FPS_THRESHOLD_DESCRIPTION = LangStrSpecValue.literal(
+    'Also turn the optimization on while hosting locally if the frame'
+    ' rate drops below this value. 0 disables the frame-rate trigger.'
+)
+
 
 class InsecureConnections(Enum):
     """The tri-state ``Insecure Connections`` setting (its config values)."""
@@ -107,6 +134,9 @@ class AdvancedState(DocUIState, state_id='settings.advanced'):
     always_use_internal_keyboard: Annotated[bool, IOAttrs('kb')] = False
     allow_extreme_aspect_ratios: Annotated[bool, IOAttrs('ar')] = False
     legacy_character_physics: Annotated[bool, IOAttrs('lcp')] = False
+    optimize_limb_self_collide: Annotated[bool, IOAttrs('olsc')] = True
+    limb_self_collide_min_players: Annotated[float, IOAttrs('lscp')] = 2.0
+    limb_self_collide_fps_threshold: Annotated[float, IOAttrs('lscf')] = 45.0
 
 
 #: Config key for each state field that is a plain config mirror. Built
@@ -129,6 +159,15 @@ _CONFIG_KEYS: dict[str, str] = {
     AdvancedState.key(
         lambda s: s.legacy_character_physics
     ): 'Legacy Character Physics',
+    AdvancedState.key(
+        lambda s: s.optimize_limb_self_collide
+    ): 'Optimize Limb Self-Collision',
+    AdvancedState.key(
+        lambda s: s.limb_self_collide_min_players
+    ): 'Limb Self-Collision Min Players',
+    AdvancedState.key(
+        lambda s: s.limb_self_collide_fps_threshold
+    ): 'Limb Self-Collision FPS Threshold',
 }
 
 
@@ -352,6 +391,13 @@ def _page() -> dui2.Response:
         legacy_character_physics=bool(
             config.get('Legacy Character Physics', False)
         ),
+        optimize_limb_self_collide=_bool('Optimize Limb Self-Collision'),
+        limb_self_collide_min_players=float(
+            config.resolve('Limb Self-Collision Min Players')
+        ),
+        limb_self_collide_fps_threshold=float(
+            config.resolve('Limb Self-Collision FPS Threshold')
+        ),
     )
     # A stored language we can no longer show reads as Auto.
     if state.language not in {c[0] for c in _language_choices()}:
@@ -445,6 +491,30 @@ def _page() -> dui2.Response:
             on_change=apply,
         ),
         dui2.FootnoteRow(_advstrs.legacy_character_physics_description.spec),
+        astate.checkbox_row(
+            lambda s: s.optimize_limb_self_collide,
+            label=_OPTIMIZE_LIMB_SELF_COLLIDE_LABEL,
+            on_change=apply,
+        ),
+        dui2.FootnoteRow(_OPTIMIZE_LIMB_SELF_COLLIDE_DESCRIPTION),
+        astate.number_row(
+            lambda s: s.limb_self_collide_min_players,
+            min_value=0.0,
+            max_value=16.0,
+            increment=1.0,
+            label=_LIMB_SELF_COLLIDE_MIN_PLAYERS_LABEL,
+            footnote=_LIMB_SELF_COLLIDE_MIN_PLAYERS_DESCRIPTION,
+            on_change=apply,
+        ),
+        astate.number_row(
+            lambda s: s.limb_self_collide_fps_threshold,
+            min_value=0.0,
+            max_value=240.0,
+            increment=5.0,
+            label=_LIMB_SELF_COLLIDE_FPS_THRESHOLD_LABEL,
+            footnote=_LIMB_SELF_COLLIDE_FPS_THRESHOLD_DESCRIPTION,
+            on_change=apply,
+        ),
     ]
 
     def _button(label: LangStrSpec, target: Target) -> dui2.Button:
@@ -502,8 +572,12 @@ def _apply_setting(context: DocUILocalAction) -> None:
     if key is None:
         return
     # The wire form of the value is exactly the config form (bools;
-    # the tri-state's string values).
+    # the tri-state's string values; whole-number values for the int
+    # settings, which page state carries as floats for their number
+    # rows).
     value = state.encode()[context.trigger]
+    if isinstance(value, float):
+        value = int(round(value))
     cfg = bui.app.config
     cfg[key] = value
     cfg.apply_and_commit()

@@ -46,7 +46,7 @@ const int kProtocolVersionHostMin = 56;
 const int kProtocolVersionClientMin = 24;
 
 // Newest protocol version we can act as a client OR host for.
-const int kProtocolVersionMax = 57;
+const int kProtocolVersionMax = 58;
 
 // The protocol 1.8 shipped on. Since then new protocols are opt-in:
 // kProtocolVersionHostMin stays here (so 1.8.x clients can join any
@@ -485,6 +485,21 @@ inline auto IsJoinableHostProtocol(int version) -> bool {
 //     'fuse_length' keeps its index): below 1 the prop draws blended,
 //     its texture's alpha included, with reflections, lighting and
 //     shadows fading along. Same minimum-protocol gate (2026-10-28).
+//
+// 58: Globals nodes gain 'limb_self_collide_skip' (an int, appended;
+//     0 = keep full self-collision, nonzero = allow the old
+//     efficiency optimization where spazzes stop testing some
+//     self-collisions while moving steadily). Large characters can
+//     visibly deform when their head/torso stop colliding, so
+//     activities enable this only when configured to (server/app
+//     config, player count, or low-FPS offline play). Older
+//     streams/replays leave it at the legacy default of 1. Same
+//     minimum-protocol gate; hosts on 56/57 can't set or connect it
+//     (2026-11-08).
+
+// First protocol with globals-node 'limb_self_collide_skip' (see the
+// 58 entry above).
+const int kProtocolVersionLimbSelfCollideSkip = 58;
 
 // First protocol with depictiondisplay 'color_multiply' (see the 57
 // entry above).

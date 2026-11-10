@@ -1986,6 +1986,43 @@ static PyMethodDef PyProtocolVersionDef = {
     ":meta private:\n",
 };
 
+// -------------------- set_limb_self_collide_skip_local -----------------------
+
+static auto PySetLimbSelfCollideSkipLocal(PyObject* self, PyObject* args)
+    -> PyObject* {
+  BA_PYTHON_TRY;
+
+  // Set a globals node's limb-self-collide skip mode directly, without
+  // writing it to our stream. Used when the host is running an old
+  // protocol with no clients connected (there is nobody to diverge
+  // from); newer protocols stream the attr normally instead.
+  PyObject* node_obj;
+  int mode;
+  if (!PyArg_ParseTuple(args, "Oi", &node_obj, &mode)) {
+    return nullptr;
+  }
+  Node* node = SceneV1Python::GetPyNode(node_obj);
+  NodeAttribute attr = node->GetAttribute("limb_self_collide_skip");
+  attr.DisconnectIncoming();
+  attr.Set(static_cast<int64_t>(mode));
+  Py_RETURN_NONE;
+  BA_PYTHON_CATCH;
+}
+
+static PyMethodDef PySetLimbSelfCollideSkipLocalDef = {
+    "set_limb_self_collide_skip_local",          // name
+    (PyCFunction)PySetLimbSelfCollideSkipLocal,  // method
+    METH_VARARGS,                                // flags
+
+    "set_limb_self_collide_skip_local(node: bascenev1.Node, mode: int)"
+    " -> None\n"
+    "\n"
+    "Set a globals node's limb-self-collide skip mode without streaming\n"
+    "it to clients.\n"
+    "\n"
+    ":meta private:\n",
+};
+
 // ------------------------- get_node_attr_tables ------------------------------
 
 static auto PyGetNodeAttrTables(PyObject* self) -> PyObject* {
@@ -2124,6 +2161,7 @@ auto PythonMethodsScene::GetMethods() -> std::vector<PyMethodDef> {
       PyBaseTimerDef,
       PyLsInputDevicesDef,
       PyProtocolVersionDef,
+      PySetLimbSelfCollideSkipLocalDef,
       PyGetNodeAttrTablesDef,
       PyGetSpazDefCountDef,
       PyReloadHooksDef,

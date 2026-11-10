@@ -95,6 +95,15 @@ class GlobalsNode : public Node {
   /// 'legacy_spaz_physics' server config value). Read at spaz creation.
   auto legacy_spaz_limbs() const -> bool { return legacy_spaz_limbs_; }
   void set_legacy_spaz_limbs(bool val) { legacy_spaz_limbs_ = val; }
+  /// Whether spazzes in this activity may skip some self-collision
+  /// tests while moving steadily (0 = keep full self-collision,
+  /// nonzero = the old efficiency optimization). Set by the activity
+  /// based on server/app config and player count/FPS; read by spazzes
+  /// each step. Defaults to 1 (the old always-on behavior) so streams
+  /// and replays predating this attr (protocol < 58) keep simulating
+  /// exactly as they originally did.
+  auto limb_self_collide_skip() const -> int { return limb_self_collide_skip_; }
+  void set_limb_self_collide_skip(int val) { limb_self_collide_skip_ = val; }
   auto paused() const -> bool { return paused_; }
   void SetPaused(bool val);
   auto vr_camera_offset() const -> const std::vector<float>& {
@@ -147,6 +156,7 @@ class GlobalsNode : public Node {
   bool slow_motion_{};
   bool paused_{};
   bool legacy_spaz_limbs_{};
+  int limb_self_collide_skip_{1};
 };
 
 }  // namespace ballistica::scene_v1
